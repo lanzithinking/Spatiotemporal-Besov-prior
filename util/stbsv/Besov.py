@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2021, B-STIP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -23,6 +23,7 @@ import scipy as sp
 import scipy.linalg as spla
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
+from scipy.stats import gennorm
 # self defined modules
 import sys
 sys.path.append( "../../" )
@@ -312,11 +313,13 @@ class Besov:
         """
         Generate Besov random function (vector) rv ~ Besov(0,C)
         """
-        lap_rv=np.random.laplace(size=(self.L,n)) # (L,n)
+        # lap_rv=np.random.laplace(size=(self.L,n)) # (L,n)
+        epd_rv=gennorm.rvs(beta=self.q,scale=2**(1.0/self.q),size=(self.L,n)) # (L,n)
         eigv,eigf=self.eigs()
-        rv=eigf.dot(np.sign(lap_rv)*(eigv[:,None]*abs(lap_rv))**(1/self.q)) # (N,n)
+        # rv=eigf.dot(np.sign(lap_rv)*(eigv[:,None]*abs(lap_rv))**(1/self.q)) # (N,n)
         # L=int(np.sqrt(self.L))**2
         # rv=eigf[:,:L].dot((np.sign(lap_rv)*(eigv[:,None]*abs(lap_rv))**(1/self.q))[:L])
+        rv=eigf.dot(eigv[:,None]**(1/self.q)*epd_rv) # (N,n)
         return rv
 
 if __name__=='__main__':

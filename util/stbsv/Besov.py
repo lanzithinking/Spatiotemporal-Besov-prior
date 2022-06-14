@@ -8,13 +8,13 @@ Shiwei Lan @ ASU, 2022
 -------------------------------
 Created February 10, 2022 @ ASU
 -------------------------------
-https://github.com/lanzithinking/Spatiotemporal-inverse-problem
+https://github.com/lanzithinking/Spatiotemporal-Besov-prior
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2021, B-STIP project"
+__copyright__ = "Copyright 2022, STBesov project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -43,7 +43,7 @@ class Besov:
         basis_opt: basis option, default to be 'Fourier'
         L: truncation number in Mercer's series
         store_eig: indicator to store eigen-pairs, default to be false
-        sigma: magnitude, default to be 1
+        sigma2: magnitude, default to be 1
         l: correlation length, default to be 0.5
         s: smoothness, default to be 2
         q: norm power, default to be 1
@@ -54,7 +54,7 @@ class Besov:
         if self.x.ndim==1: self.x=self.x[:,None]
         self.parameters=kwargs # all parameters of the kernel
         self.basis_opt=self.parameters.get('basis_opt','Fourier') # basis option
-        self.sigma=self.parameters.get('sigma',1) # magnitude
+        self.sigma2=self.parameters.get('sigma2',1) # magnitude
         self.l=self.parameters.get('l',0.5) # correlation length
         self.s=self.parameters.get('s',2) # smoothness
         self.q=self.parameters.get('q',1) # norm power
@@ -161,15 +161,16 @@ class Besov:
                     gamma=np.append(gamma,(self.l+(np.arange(resL-rtL)+0.5)**2+(rtL+0.5)**2)**(-(self.s/self.d+1./2-1./self.q)))
         else:
             raise NotImplementedError('Basis for spatial dimension larger than 2 is not implemented yet!')
-        gamma*=self.sigma**(1/self.q)
+        gamma*=self.sigma2**(1/self.q)
         return gamma
     
-    def tomat(self):
+    def tomat(self,**kwargs):
         """
         Get kernel as matrix
         """
+        alpha=kwargs.get('alpha',1)
         eigv,eigf = self.eigs() # obtain eigen-basis
-        C = (eigf*eigv).dot(eigf.T) + self.jit*sps.eye(self.N)
+        C = (eigf*pow(eigv+(alpha<0)*self.jit,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
         # if self.spdapx and not sps.issparse(C):
         #     warnings.warn('Possible memory overflow!')
         return C
@@ -240,7 +241,7 @@ class Besov:
             if eigf.shape[1]<L:
                 eigf=np.pad(eigf,[(0,0),(0,L-eigf.shape[1])],mode='constant')
                 warnings.warn('zero eigenvectors padded!')
-            eigv=self._qrteigv(L)**self.q
+            eigv=abs(self._qrteigv(L))**self.q
             if len(eigv)<L:
                 eigv=np.pad(eigv,[0,L-len(eigv)],mode='constant')
                 warnings.warn('zero eigenvalues padded!')
@@ -294,15 +295,15 @@ class Besov:
         logpdf=q_ldet+qsum
         return logpdf,q_ldet
     
-    def update(self,sigma=None,l=None):
+    def update(self,sigma2=None,l=None):
         """
         Update the eigen-basis
         """
-        if sigma is not None:
-            sigma_=self.sigma
-            self.sigma=sigma
+        if sigma2 is not None:
+            sigma2_=self.sigma2
+            self.sigma2=sigma2
             if self.store_eig:
-                self.eigv*=self.sigma/sigma_
+                self.eigv*=self.sigma2/sigma2_
         if l is not None:
             self.l=l
             if self.store_eig:

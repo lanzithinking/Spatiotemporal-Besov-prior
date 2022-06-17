@@ -363,19 +363,19 @@ if __name__=='__main__':
 #         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
 #
 # #     X=bsv.rnd(n=10)
-# #     X=X.reshape((X.shape[0],5,2),order='F')
-# #     lobsvdf,_=bsv.logpdf(X)
+# #     logpdf,_=bsv.logpdf(X)
 # #     if verbose:
-# #         print('Log-pdf of a matrix normal random variable: {:.4f}'.format(lobsvdf))
+# #         print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
 #     t3=time.time()
 #     if verbose:
 #         print('time: %.5f'% (t3-t2))
 #
-    # u=bsv.rnd()
-#     v=bsv.rnd()
+#     bsv2=stbsv; bsv2.q=2; bsv2=bsv2.update(l=bsv.l)
+#     u=bsv2.rnd()
+#     v=bsv2.rnd()
 #     h=1e-5
-#     dlogpdfv_fd=(bsv.logpdf(u+h*v)[0]-bsv.logpdf(u)[0])/h
-#     dlogpdfv=-bsv.solve(u).T.dot(v)
+#     dlogpdfv_fd=(bsv2.logpdf(u+h*v)[0]-bsv2.logpdf(u)[0])/h
+#     dlogpdfv=-bsv2.solve(u).T.dot(v)
 #     rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
 #     if verbose:
 #         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)

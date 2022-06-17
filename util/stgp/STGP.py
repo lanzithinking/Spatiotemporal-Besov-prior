@@ -354,20 +354,20 @@ class STGP(GP):
             Lambda=self.Lambda; L=self.L
         else:
             L=Lambda.shape[1]
-        if op in ('u','up'):
+        if opt in ('u','up'):
             alpha=1
-        elif op in ('d','dn','down'):
+        elif opt in ('d','dn','down'):
             alpha=-1
         else:
             alpha=0
         try:
-            gamma=pow(np.arange(1,L),-self.kappa/2)
+            gamma=pow(np.arange(1,L+1),-self.kappa/2)
         except (TypeError,ValueError):
             if 'eigCx' in self.kappa:
                 gamma,_=self.C_x.eigs(L)
                 gamma=np.sqrt(abs(gamma))
             else:
-                gamma=np.arange(1,L)
+                gamma=np.arange(1,L+1)
         U=Lambda/pow(gamma,alpha)
         return U
     

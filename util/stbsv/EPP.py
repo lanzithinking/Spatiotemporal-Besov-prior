@@ -141,7 +141,6 @@ class EPP:
 #                     import pydevd; pydevd.settrace()
                     nproc=self.comm.size; rank=self.comm.rank
                     if nproc==1: raise Exception('Only one process found!')
-#                     Cv_loc=self._rowmult(self.x[rank::nproc,:],v,transp)
                     Cv_loc=multf(kerf(self.x[rank::nproc,:],self.x),v,transp)
                     Cv=np.empty_like(v)
                     self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
@@ -215,8 +214,8 @@ class EPP:
             y=self.solve(x,**kwargs)
         else:
             eigv,eigf=self.eigs(**kwargs)
-            # if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
-            y=multf(eigf*pow((alpha<0)*self.jit+eigv,alpha),multf(eigf.T,x,transp),transp)
+            if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+            y=multf(eigf*pow(eigv,alpha),multf(eigf.T,x,transp),transp)
         return y
     
     def logdet(self):
@@ -247,14 +246,14 @@ class EPP:
                 half_ldet=-X.shape[1]*self.logdet()/2
                 quad=X*self.solve(X)
         else:
-            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit**2]+=self.jit**2
+            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit]+=self.jit
             half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
             half_quad=eigf.T.dot(X)/rteigv[:,None]
             quad=half_quad**2
         quad=-0.5*np.sum(quad)**(self.q/2)
-        scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
-        logpdf=half_ldet+quad+scal_fctr
-        return logpdf,half_ldet,scal_fctr
+        # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
+        logpdf=half_ldet+quad#+scal_fctr
+        return logpdf,half_ldet#,scal_fctr
     
     def update(self,sigma2=None,l=None):
         """

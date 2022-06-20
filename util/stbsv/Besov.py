@@ -170,7 +170,8 @@ class Besov:
         """
         alpha=kwargs.get('alpha',1)
         eigv,eigf = self.eigs() # obtain eigen-basis
-        C = (eigf*pow(eigv+(alpha<0)*self.jit,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
+        if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+        C = (eigf*pow(eigv,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
         # if self.spdapx and not sps.issparse(C):
         #     warnings.warn('Possible memory overflow!')
         return C
@@ -179,31 +180,34 @@ class Besov:
         """
         Kernel multiply a function (vector): C*v
         """
+        alpha=kwargs.pop('alpha',1) # power of dynamic eigenvalues
         transp=kwargs.get('transp',False) # whether to transpose the result
         if not self.spdapx:
-            Cv=multf(self.tomat(),v,transp)
+            Cv=multf(self.tomat(alpha=alpha),v,transp)
         else:
             eigv,eigf = self.eigs() # obtain eigen-pairs
-#             prun=kwargs.get('prun',True) and self.comm # control of parallel run
-#             if prun:
-#                 try:
-# #                     import pydevd; pydevd.settrace()
-#                     nproc=self.comm.size; rank=self.comm.rank
-#                     if nproc==1: raise Exception('Only one process found!')
-#                     Cv_loc=multf(eigf[rank::nproc,:]*eigv,multf(eigf.T,v,transp),transp)
-#                     Cv=np.empty_like(v)
-#                     self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
-#                     pidx=np.concatenate([np.arange(self.N)[i::nproc] for i in np.arange(nproc)])
-#                     Cv[pidx]=Cv.copy()
-#                 except Exception as e:
-#                     if rank==0:
-#                         warnings.warn('Parallel run failed: '+str(e))
-#                     prun=False
-#                     pass
-#             if not prun:
-#                 Cv=np.concatenate([multf(eigf_i*eigv,multf(eigf.T,v,transp),transp) for eigf_i in eigf])
-#             # if transp: Cv=Cv.swapaxes(0,1)
-            Cv=multf(eigf*eigv,multf(eigf.T,v,transp),transp)
+            if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+            eigv_ = pow(eigv,alpha)
+            prun=kwargs.get('prun',True) and self.comm # control of parallel run
+            if prun:
+                try:
+#                     import pydevd; pydevd.settrace()
+                    nproc=self.comm.size; rank=self.comm.rank
+                    if nproc==1: raise Exception('Only one process found!')
+                    Cv_loc=multf(eigf[rank::nproc,:]*eigv_,multf(eigf.T,v,transp),transp)
+                    Cv=np.empty_like(v)
+                    self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
+                    pidx=np.concatenate([np.arange(self.N)[i::nproc] for i in np.arange(nproc)])
+                    Cv[pidx]=Cv.copy()
+                except Exception as e:
+                    if rank==0:
+                        warnings.warn('Parallel run failed: '+str(e))
+                    prun=False
+                    pass
+            if not prun:
+            #     Cv=np.concatenate([multf(eigf_i*eigv_,multf(eigf.T,v,transp),transp) for eigf_i in eigf])
+            # # if transp: Cv=Cv.swapaxes(0,1)
+                Cv=multf(eigf*eigv_,multf(eigf.T,v,transp),transp)
             Cv+=self.jit*v
         return Cv
     
@@ -215,17 +219,7 @@ class Besov:
         if not self.spdapx:
             invCv=mdivf(self.tomat(),v,transp)
         else:
-#             C_op=spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,transp=transp,prun=True))
-#             nd_v=np.ndim(v)
-#             v=v.reshape(v.shape+(1,)*(3-nd_v),order='F')
-#             invCv=np.array([itsol(C_op,v[:,:,k],solver='cgs',transp=transp,comm=kwargs.pop('comm',None)) for k in np.arange(v.shape[2])])
-#             if nd_v==3:
-#                 invCv=invCv.transpose((1,2,0))
-#             else:
-#                 invCv=np.squeeze(invCv,axis=tuple(np.arange(0,nd_v-3,-1)))
-# #             if transp: Cv=Cv.swapaxes(0,1)
-            eigv,eigf = self.eigs() # obtain eigen-pairs
-            invCv=multf(eigf/(self.jit+eigv),multf(eigf.T,v,transp),transp)
+            invCv=self.mult(v,alpha=-1,transp=transp)
         return invCv
     
     def eigs(self,L=None,upd=False,**kwargs):
@@ -258,14 +252,8 @@ class Besov:
         transp=kwargs.get('transp',False)
         if alpha==0:
             y=x
-        elif alpha==1:
-            y=self.mult(x,**kwargs)
-        elif alpha==-1:
-            y=self.solve(x,**kwargs)
         else:
-            eigv,eigf=self.eigs(**kwargs)
-            # if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
-            y=multf(eigf*pow((alpha<0)*self.jit+eigv,alpha),multf(eigf.T,x,transp),transp)
+            y=self.mult(x,alpha=alpha,**kwargs)
         return y
     
     def logdet(self):
@@ -290,7 +278,7 @@ class Besov:
             eigf=basisf()
             qrt_eigv=self._qrteigv()
             q_ldet=-X.shape[1]*np.sum(np.log(qrt_eigv))
-            proj_X=eigf.T.dot(X)/qrt_eigv
+            proj_X=eigf.T.dot(X)/qrt_eigv[:,None]
         qsum=-0.5*np.sum(abs(proj_X)**self.q)
         logpdf=q_ldet+qsum
         return logpdf,q_ldet
@@ -314,12 +302,8 @@ class Besov:
         """
         Generate Besov random function (vector) rv ~ Besov(0,C)
         """
-        # lap_rv=np.random.laplace(size=(self.L,n)) # (L,n)
         epd_rv=gennorm.rvs(beta=self.q,scale=2**(1.0/self.q),size=(self.L,n)) # (L,n)
         eigv,eigf=self.eigs()
-        # rv=eigf.dot(np.sign(lap_rv)*(eigv[:,None]*abs(lap_rv))**(1/self.q)) # (N,n)
-        # L=int(np.sqrt(self.L))**2
-        # rv=eigf[:,:L].dot((np.sign(lap_rv)*(eigv[:,None]*abs(lap_rv))**(1/self.q))[:L])
         rv=eigf.dot(eigv[:,None]**(1/self.q)*epd_rv) # (N,n)
         return rv
 
@@ -334,53 +318,53 @@ if __name__=='__main__':
     xx,yy=np.meshgrid(np.linspace(0,1,128),np.linspace(0,1,128))
     x=np.stack([xx.flatten(),yy.flatten()]).T
     bsv=Besov(x,L=1000,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
-#     verbose=bsv.comm.rank==0 if bsv.comm is not None else True
-#     if verbose:
-#         print('Eigenvalues :', np.round(bsv.eigv[:min(10,bsv.L)],4))
-#         print('Eigenvectors :', np.round(bsv.eigf[:,:min(10,bsv.L)],4))
-#
-#     t1=time.time()
-#     if verbose:
-#         print('time: %.5f'% (t1-t0))
-#
-#     v=bsv.rnd(n=2)
-#     C=bsv.tomat()
-#     Cv=C.dot(v)
-#     Cv_te=bsv.act(v)
-#     if verbose:
-#         print('Relative difference between matrix-vector product and action on vector: {:.4f}'.format(spla.norm(Cv-Cv_te)/spla.norm(Cv)))
-#
-#     t2=time.time()
-#     if verbose:
-#         print('time: %.5f'% (t2-t1))
-#
-#     v=bsv.rnd(n=2)
-#     invCv=np.linalg.solve(C,v)
-# #     C_op=spsla.LinearOperator((bsv.N,)*2,matvec=lambda v:bsv.mult(v))
-# #     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
-#     invCv_te=bsv.act(v,-1)
-#     if verbose:
-#         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
-#
-# #     X=bsv.rnd(n=10)
-# #     logpdf,_=bsv.logpdf(X)
-# #     if verbose:
-# #         print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
-#     t3=time.time()
-#     if verbose:
-#         print('time: %.5f'% (t3-t2))
-#
-#     bsv2=stbsv; bsv2.q=2; bsv2=bsv2.update(l=bsv.l)
-#     u=bsv2.rnd()
-#     v=bsv2.rnd()
-#     h=1e-5
-#     dlogpdfv_fd=(bsv2.logpdf(u+h*v)[0]-bsv2.logpdf(u)[0])/h
-#     dlogpdfv=-bsv2.solve(u).T.dot(v)
-#     rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
-#     if verbose:
-#         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
-#     if verbose:
-#         print('time: %.5f'% (time.time()-t3))
+    verbose=bsv.comm.rank==0 if bsv.comm is not None else True
+    if verbose:
+        print('Eigenvalues :', np.round(bsv.eigv[:min(10,bsv.L)],4))
+        print('Eigenvectors :', np.round(bsv.eigf[:,:min(10,bsv.L)],4))
+
+    t1=time.time()
+    if verbose:
+        print('time: %.5f'% (t1-t0))
+
+    v=bsv.rnd(n=2)
+    C=bsv.tomat()
+    Cv=C.dot(v)
+    Cv_te=bsv.act(v)
+    if verbose:
+        print('Relative difference between matrix-vector product and action on vector: {:.4f}'.format(spla.norm(Cv-Cv_te)/spla.norm(Cv)))
+
+    t2=time.time()
+    if verbose:
+        print('time: %.5f'% (t2-t1))
+
+    v=bsv.rnd(n=2)
+    invCv=np.linalg.solve(C,v)
+#     C_op=spsla.LinearOperator((bsv.N,)*2,matvec=lambda v:bsv.mult(v))
+#     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
+    invCv_te=bsv.act(v,-1)
+    if verbose:
+        print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
+
+    X=bsv.rnd(n=10)
+    logpdf,_=bsv.logpdf(X)
+    if verbose:
+        print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
+    t3=time.time()
+    if verbose:
+        print('time: %.5f'% (t3-t2))
+
+    bsv2=bsv; bsv2.q=2; bsv2=bsv2.update(l=bsv.l)
+    u=bsv2.rnd()
+    v=bsv2.rnd()
+    h=1e-6
+    dlogpdfv_fd=(bsv2.logpdf(u+h*v)[0]-bsv2.logpdf(u)[0])/h
+    dlogpdfv=-bsv2.solve(u).T.dot(v)
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
+    if verbose:
+        print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
+    if verbose:
+        print('time: %.5f'% (time.time()-t3))
     
     import matplotlib.pyplot as plt
     

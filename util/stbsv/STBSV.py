@@ -36,7 +36,7 @@ import warnings
 warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
     
-class STBSV(Besov,EPP):
+class STBSV(Besov):
     def __init__(self,spat,temp,Lambda=None,store_eig=False,**kwargs):
         """
         Initialize the STBSV class with spatial (Besov) class bsv, temporal (EPP) class epp and the dynamic eigenvalues Lambda
@@ -87,7 +87,9 @@ class STBSV(Besov,EPP):
         """
         # C = Besov.tomat(self,**kwargs)
         alpha=kwargs.get('alpha',1) # power of dynamic eigenvalues
-        Lambda_=pow(abs(self.Lambda)**self.bsv.q+(alpha<0)*self.jit,alpha); _,Phi_x=self.bsv.eigs(self.L)
+        Lambda_=pow(abs(self.Lambda)**self.bsv.q,alpha)
+        if alpha<0: Lambda_[abs(Lambda_)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+        _,Phi_x=self.bsv.eigs(self.L)
         LambdaqPhi=Lambda_[:,None,:]*Phi_x[None,:,:] # (J,I,L)
         LambdaqPhi=LambdaqPhi.dot(Phi_x.T)+((alpha>=0)*self.jit)*np.eye(self.I)[None,:,:] # (J,I,I)
         C=sps.block_diag(LambdaqPhi,format='csr') # (IJ,IJ)
@@ -106,25 +108,27 @@ class STBSV(Besov,EPP):
             Cv=self.tomat(alpha=alpha).dot(v)
         else:
             eigv,eigf = self.eigs() # obtain eigen-pairs
-#             prun=kwargs.get('prun',True) and self.comm # control of parallel run
-#             if prun:
-#                 try:
-# #                     import pydevd; pydevd.settrace()
-#                     nproc=self.comm.size; rank=self.comm.rank
-#                     if nproc==1: raise Exception('Only one process found!')
-#                     Cv_loc=multf(eigf[rank::nproc,:]*eigv,multf(eigf.T,v))
-#                     Cv=np.empty_like(v)
-#                     self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
-#                     pidx=np.concatenate([np.arange(self.N)[i::nproc] for i in np.arange(nproc)])
-#                     Cv[pidx]=Cv.copy()
-#                 except Exception as e:
-#                     if rank==0:
-#                         warnings.warn('Parallel run failed: '+str(e))
-#                     prun=False
-#                     pass
-#             if not prun:
+            if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+            eigv_ = pow(eigv,alpha)
+            prun=kwargs.get('prun',True) and self.comm # control of parallel run
+            if prun:
+                try:
+#                     import pydevd; pydevd.settrace()
+                    nproc=self.comm.size; rank=self.comm.rank
+                    if nproc==1: raise Exception('Only one process found!')
+                    Cv_loc=multf(eigf[rank::nproc,:].multiply(eigv_),multf(eigf.T,v))
+                    Cv=np.empty_like(v)
+                    self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
+                    pidx=np.concatenate([np.arange(self.N)[i::nproc] for i in np.arange(nproc)])
+                    Cv[pidx]=Cv.copy()
+                except Exception as e:
+                    if rank==0:
+                        warnings.warn('Parallel run failed: '+str(e))
+                    prun=False
+                    pass
+            if not prun:
 #                 Cv=np.concatenate([multf(eigf_i*eigv,multf(eigf.T,v)) for eigf_i in eigf])
-            Cv=multf(eigf.multiply(pow(eigv+(alpha<0)*self.jit,alpha)),multf(eigf.T,v))
+                Cv=multf(eigf.multiply(eigv_),multf(eigf.T,v))
             Cv+=self.jit*v
         return Cv
     
@@ -132,21 +136,7 @@ class STBSV(Besov,EPP):
         """
         Kernel solve a function (vector): C^(-1)*v
         """
-        alpha=kwargs.pop('alpha',1) # power of dynamic eigenvalues
-        if not self.spdapx:
-            invCv=mdivf(self.tomat(),v)
-        else:
-#             C_op=spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,prun=True))
-#             nd_v=np.ndim(v)
-#             v=v.reshape(v.shape+(1,)*(3-nd_v),order='F')
-#             invCv=np.array([itsol(C_op,v[:,:,k],solver='cgs',comm=kwargs.pop('comm',None)) for k in np.arange(v.shape[2])])
-#             if nd_v==3:
-#                 invCv=invCv.transpose((1,2,0))
-#             else:
-#                 invCv=np.squeeze(invCv,axis=tuple(np.arange(0,nd_v-3,-1)))
-            eigv,eigf = self.eigs() # obtain eigen-pairs
-            invCv=multf(eigf/(self.jit+eigv),multf(eigf.T,v))
-        return invCv
+        return Besov.solve(self,v,**kwargs)
     
     def eigs(self,L=None,upd=False,**kwargs):
         """
@@ -174,13 +164,7 @@ class STBSV(Besov,EPP):
         Obtain the action of C^alpha
         y=C^alpha *x
         """
-        if alpha==0:
-            y=x
-        elif alpha==-1:
-            y=self.solve(x,**kwargs)
-        else:
-            y=self.mult(x,alpha=alpha,**kwargs)
-        return y
+        return Besov.act(self,x,alpha=alpha,**kwargs)
     
     def logdet(self):
         """
@@ -241,7 +225,7 @@ class STBSV(Besov,EPP):
         else:
             alpha=0
         try:
-            gamma=pow(np.arange(1,L+1),-self.kappa/2)
+            gamma=pow(np.arange(1,L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
         except (TypeError,ValueError):
             if 'eigCx' in self.kappa:
                 gamma,_=self.bsv.eigs(L)
@@ -274,13 +258,13 @@ if __name__=='__main__':
     ## spatial class
     # x=np.random.rand(64**2,2)
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
-    xx,yy=np.meshgrid(np.linspace(0,1,128),np.linspace(0,1,128))
+    xx,yy=np.meshgrid(np.linspace(0,1,32),np.linspace(0,1,32))
     x=np.stack([xx.flatten(),yy.flatten()]).T
     bsv=Besov(x,L=100,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
     ## temporal class
-    t=np.linspace(0,1,50)[:,np.newaxis]
+    t=np.linspace(0,1,10)[:,np.newaxis]
     # x=np.random.rand(100,1) 
-    epp=EPP(t,L=20,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=1.5)
+    epp=EPP(t,L=10,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=1.5)
     ## spatiotemporal class
     Lambda=epp.rnd(n=100)
     stbsv=STBSV(bsv,epp,Lambda,store_eig=True)
@@ -293,44 +277,44 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t1-t0))
 
-    # v=stbsv.rnd(n=2)
-    # C=stbsv.tomat()
-    # Cv=C.dot(v)
-    # Cv_te=stbsv.act(v)
-    # if verbose:
-    #     print('Relative difference between matrix-vector product and action on vector: {:.4f}'.format(spla.norm(Cv-Cv_te)/spla.norm(Cv)))
-    #
-    # t2=time.time()
-    # if verbose:
-    #     print('time: %.5f'% (t2-t1))
+    v=stbsv.rnd(n=2)
+    C=stbsv.tomat()
+    Cv=C.dot(v)
+    Cv_te=stbsv.act(v)
+    if verbose:
+        print('Relative difference between matrix-vector product and action on vector: {:.4f}'.format(spla.norm(Cv-Cv_te)/spla.norm(Cv)))
 
-#     v=stbsv.rnd(n=2)
-#     invCv=spsla.spsolve(C,v)
-# #     C_op=spsla.LinearOperator((stbsv.N,)*2,matvec=lambda v:stbsv.mult(v))
-# #     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
-#     invCv_te=stbsv.act(v,-1)
-#     if verbose:
-#         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
+    t2=time.time()
+    if verbose:
+        print('time: %.5f'% (t2-t1))
 
-    # X=stbsv.rnd(n=10)
-    # logpdf,_=stbsv.logpdf(X)
-    # if verbose:
-    #     print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
-    # t3=time.time()
-    # if verbose:
-    #     print('time: %.5f'% (t3-t2))
-    
-    # stbsv2=stbsv; stbsv2.bsv.q=2; stbsv2=stbsv2.update(bsv=stbsv2.bsv.update(l=stbsv.bsv.l))
-    # u=stbsv2.rnd()
-    # v=stbsv2.rnd()
-    # h=1e-6
-    # dlogpdfv_fd=(stbsv2.logpdf(u+h*v)[0]-stbsv2.logpdf(u)[0])/h
-    # dlogpdfv=-stbsv2.solve(u).T.dot(v)
-    # rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
-    # if verbose:
-    #     print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
-    # if verbose:
-    #     print('time: %.5f'% (time.time()-t3))
+    v=stbsv.rnd(n=2)
+    invCv=spsla.spsolve(C,v)
+#     C_op=spsla.LinearOperator((stbsv.N,)*2,matvec=lambda v:stbsv.mult(v))
+#     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
+    invCv_te=stbsv.act(v,-1)
+    if verbose:
+        print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
+
+    X=stbsv.rnd(n=10)
+    logpdf,_=stbsv.logpdf(X)
+    if verbose:
+        print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
+    t3=time.time()
+    if verbose:
+        print('time: %.5f'% (t3-t2))
+
+    stbsv2=stbsv; stbsv2.bsv.q=2; stbsv2=stbsv2.update(bsv=stbsv2.bsv.update(l=stbsv.bsv.l))
+    u=stbsv2.rnd()
+    v=stbsv2.rnd()
+    h=1e-6
+    dlogpdfv_fd=(stbsv2.logpdf(u+h*v)[0]-stbsv2.logpdf(u)[0])/h
+    dlogpdfv=-stbsv2.solve(u).T.dot(v)
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
+    if verbose:
+        print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
+    if verbose:
+        print('time: %.5f'% (time.time()-t3))
     
     import matplotlib.pyplot as plt
     

@@ -11,10 +11,10 @@ Created February 10, 2022 @ ASU
 https://github.com/lanzithinking/Spatiotemporal-Besov-prior
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2022, STBesov project"
+__copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -28,14 +28,14 @@ from scipy.stats import gennorm
 import sys
 sys.path.append( "../../" )
 # from __init__ import *
-from util.stbsv.linalg import *
+from util.stbp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings
 warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
     
-class Besov:
+class BSV:
     def __init__(self,x,L=None,store_eig=False,**kwargs):
         """
         Initialize the Besov class with inputs and kernel settings
@@ -317,7 +317,7 @@ if __name__=='__main__':
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
     xx,yy=np.meshgrid(np.linspace(0,1,128),np.linspace(0,1,128))
     x=np.stack([xx.flatten(),yy.flatten()]).T
-    bsv=Besov(x,L=1000,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
+    bsv=BSV(x,L=1000,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
     verbose=bsv.comm.rank==0 if bsv.comm is not None else True
     if verbose:
         print('Eigenvalues :', np.round(bsv.eigv[:min(10,bsv.L)],4))

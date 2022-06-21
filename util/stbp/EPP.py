@@ -11,10 +11,10 @@ Created June 9, 2022 @ ASU
 https://github.com/lanzithinking/Spatiotemporal-Besov-prior
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2022, STBesov project"
+__copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -29,7 +29,7 @@ from scipy.special import gammaln
 import sys
 sys.path.append( "../../" )
 # from __init__ import *
-from util.stbsv.linalg import *
+from util.stbp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings

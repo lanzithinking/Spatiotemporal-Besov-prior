@@ -11,10 +11,10 @@ Created June 13, 2022 @ ASU
 https://github.com/lanzithinking/Spatiotemporal-Besov-prior
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2022, STBesov project"
+__copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -27,19 +27,19 @@ from scipy.stats import gennorm
 # self defined modules
 import sys
 sys.path.append( "../../" )
-from util.stbsv.Besov import *
-from util.stbsv.EPP import *
-from util.stbsv.linalg import *
+from util.stbp.BSV import *
+from util.stbp.EPP import *
+from util.stbp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings
 warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
     
-class STBSV(Besov):
+class STBP(BSV):
     def __init__(self,spat,temp,Lambda=None,store_eig=False,**kwargs):
         """
-        Initialize the STBSV class with spatial (Besov) class bsv, temporal (EPP) class epp and the dynamic eigenvalues Lambda
+        Initialize the STBP class with spatial (BSV) class bsv, temporal (EPP) class epp and the dynamic eigenvalues Lambda
         bsv: spatial class (discrete size I x L)
         C_t: temporal class (discrete size J x L)
         Lambda: dynamic (q-root) eigenvalues, discrete size J x L
@@ -51,17 +51,16 @@ class STBSV(Besov):
         lambda_l ~ EPP(0,cov,q)
         phi_l - basis of Besov prior
         """
-        if type(spat) is Besov:
+        if type(spat) is BSV:
             self.bsv=spat # spatial class
         else:
-            self.bsv=Besov(spat,store_eig=store_eig,**kwargs)
+            self.bsv=BSV(spat,store_eig=store_eig,**kwargs)
         if type(temp) is EPP:
             self.epp=temp # temporal class
         else:
             self.epp=EPP(temp,store_eig=store_eig or Lambda is None,**kwargs)
         self.Lambda=Lambda if Lambda is not None else self.epp.eigf # dynamic eigenvalues
         self.parameters=kwargs # all parameters of the kernel
-        self.kappa=self.parameters.get('kappa',2) # decaying rate for dynamic eigenvalues, default to be 2
         self.jit=self.parameters.get('jit',1e-6) # jitter
         self.I,self.J=self.bsv.N,self.epp.N # spatial and temporal dimensions
         self.N=self.I*self.J # joint dimension (number of total inputs per trial)
@@ -85,7 +84,7 @@ class STBSV(Besov):
         """
         Get kernel as matrix
         """
-        # C = Besov.tomat(self,**kwargs)
+        # C = BSV.tomat(self,**kwargs)
         alpha=kwargs.get('alpha',1) # power of dynamic eigenvalues
         Lambda_=pow(abs(self.Lambda)**self.bsv.q,alpha)
         if alpha<0: Lambda_[abs(Lambda_)<np.finfo(np.float).eps]=np.finfo(np.float).eps
@@ -136,7 +135,7 @@ class STBSV(Besov):
         """
         Kernel solve a function (vector): C^(-1)*v
         """
-        return Besov.solve(self,v,**kwargs)
+        return BSV.solve(self,v,**kwargs)
     
     def eigs(self,L=None,upd=False,**kwargs):
         """
@@ -164,7 +163,7 @@ class STBSV(Besov):
         Obtain the action of C^alpha
         y=C^alpha *x
         """
-        return Besov.act(self,x,alpha=alpha,**kwargs)
+        return BSV.act(self,x,alpha=alpha,**kwargs)
     
     def logdet(self):
         """
@@ -176,7 +175,7 @@ class STBSV(Besov):
     
     def logpdf(self,X):
         """
-        Compute logpdf of centered spatiotemporal Besov process X ~ STBSV(0,C,q)
+        Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
         """
         if not self.spdapx:
             _,eigf = self.eigs()
@@ -227,11 +226,8 @@ class STBSV(Besov):
         try:
             gamma=pow(np.arange(1,L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
         except (TypeError,ValueError):
-            if 'eigCx' in self.kappa:
-                gamma,_=self.bsv.eigs(L)
-                gamma=abs(gamma)**(1./self.bsv.q)
-            else:
-                gamma=np.arange(1,L+1)
+            gamma,_=self.bsv.eigs(L)
+            gamma=abs(gamma)**(1./self.bsv.q)
         gamma=gamma[None,:]
         if np.ndim(Lambda)>2: gamma=gamma[:,:,None]
         U=Lambda/pow(gamma,alpha)
@@ -239,7 +235,7 @@ class STBSV(Besov):
     
     def rnd(self,n=1):
         """
-        Generate spatiotemporal Besov random function (vector) rv ~ STBSV(0,C,q)
+        Generate spatiotemporal Besov random function (vector) rv ~ STBP(0,C,q)
         """
         epd_rv=self.scale_Lambda(self.epp.rnd(n=self.L*n).reshape((-1,self.L,n),order='F'), 'down')#.reshape((-1,n)) # (LJ,n)
         # _,eigf=self.eigs()
@@ -260,27 +256,27 @@ if __name__=='__main__':
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
     xx,yy=np.meshgrid(np.linspace(0,1,32),np.linspace(0,1,32))
     x=np.stack([xx.flatten(),yy.flatten()]).T
-    bsv=Besov(x,L=100,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
+    bsv=BSV(x,L=100,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
     ## temporal class
     t=np.linspace(0,1,10)[:,np.newaxis]
     # x=np.random.rand(100,1) 
     epp=EPP(t,L=10,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=1.5)
     ## spatiotemporal class
     Lambda=epp.rnd(n=100)
-    stbsv=STBSV(bsv,epp,Lambda,store_eig=True)
-    verbose=stbsv.comm.rank==0 if stbsv.comm is not None else True
+    stbp=STBP(bsv,epp,Lambda,store_eig=True)
+    verbose=stbp.comm.rank==0 if stbp.comm is not None else True
     if verbose:
-        print('Eigenvalues :', np.round(stbsv.eigv[:min(10,stbsv.L)],4))
-        print('Eigenvectors :', np.round(stbsv.eigf[:,:min(10,stbsv.L)],4))
+        print('Eigenvalues :', np.round(stbp.eigv[:min(10,stbp.L)],4))
+        print('Eigenvectors :', np.round(stbp.eigf[:,:min(10,stbp.L)],4))
 
     t1=time.time()
     if verbose:
         print('time: %.5f'% (t1-t0))
 
-    v=stbsv.rnd(n=2)
-    C=stbsv.tomat()
+    v=stbp.rnd(n=2)
+    C=stbp.tomat()
     Cv=C.dot(v)
-    Cv_te=stbsv.act(v)
+    Cv_te=stbp.act(v)
     if verbose:
         print('Relative difference between matrix-vector product and action on vector: {:.4f}'.format(spla.norm(Cv-Cv_te)/spla.norm(Cv)))
 
@@ -288,28 +284,28 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t2-t1))
 
-    v=stbsv.rnd(n=2)
+    v=stbp.rnd(n=2)
     invCv=spsla.spsolve(C,v)
-#     C_op=spsla.LinearOperator((stbsv.N,)*2,matvec=lambda v:stbsv.mult(v))
+#     C_op=spsla.LinearOperator((stbp.N,)*2,matvec=lambda v:stbp.mult(v))
 #     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
-    invCv_te=stbsv.act(v,-1)
+    invCv_te=stbp.act(v,-1)
     if verbose:
         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
 
-    X=stbsv.rnd(n=10)
-    logpdf,_=stbsv.logpdf(X)
+    X=stbp.rnd(n=10)
+    logpdf,_=stbp.logpdf(X)
     if verbose:
         print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
     t3=time.time()
     if verbose:
         print('time: %.5f'% (t3-t2))
 
-    stbsv2=stbsv; stbsv2.bsv.q=2; stbsv2=stbsv2.update(bsv=stbsv2.bsv.update(l=stbsv.bsv.l))
-    u=stbsv2.rnd()
-    v=stbsv2.rnd()
+    stbp2=stbp; stbp2.bsv.q=2; stbp2=stbp2.update(bsv=stbp2.bsv.update(l=stbp.bsv.l))
+    u=stbp2.rnd()
+    v=stbp2.rnd()
     h=1e-6
-    dlogpdfv_fd=(stbsv2.logpdf(u+h*v)[0]-stbsv2.logpdf(u)[0])/h
-    dlogpdfv=-stbsv2.solve(u).T.dot(v)
+    dlogpdfv_fd=(stbp2.logpdf(u+h*v)[0]-stbp2.logpdf(u)[0])/h
+    dlogpdfv=-stbp2.solve(u).T.dot(v)
     rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
     if verbose:
         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
@@ -318,7 +314,7 @@ if __name__=='__main__':
     
     import matplotlib.pyplot as plt
     
-    u=stbsv.rnd(n=5).reshape((stbsv.I,stbsv.J,-1),order='F')
+    u=stbp.rnd(n=5).reshape((stbp.I,stbp.J,-1),order='F')
     nrow=5; ncol=5
     fig, axes=plt.subplots(nrows=nrow,ncols=nrow,sharex=True,sharey=True,figsize=(15,12))
     for i in range(nrow):

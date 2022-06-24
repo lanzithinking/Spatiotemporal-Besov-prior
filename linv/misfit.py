@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
-Class definition of data-misfit for dynamic linear model.
----------------------------------------------------------------
-Created February 15, 2022 for project of Bayesian Spatiotemporal inverse problem (B-STIP)
+Class definition of data-misfit for linear model.
+--------------------------------------------------------------------------
+Created February 15, 2022 for project of Spatiotemporal Besov prior (STBP)
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2021, The Bayesian STIP project"
+__copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -91,7 +91,7 @@ class misfit(object):
             img = kwargs.pop('img',self.truth)
             filter = self._filter(kwargs.pop('fltsz',self.fltsz), kwargs.pop('fltnz',self.fltnz))
             obs, nzvar = self.observe(img, filter)
-            obs += np.sqrt(nzvar) * np.random.RandomState(kwargs.pop('rand_seed',2021)).randn(*img.shape)
+            obs += np.sqrt(nzvar) * np.random.RandomState(kwargs.pop('rand_seed',2022)).randn(*img.shape)
             save_obs=kwargs.pop('save_obs',True)
             if save_obs:
                 np.savez_compressed(os.path.join(obs_file_loc,obs_file_name), obs=obs, nzvar=nzvar)
@@ -135,9 +135,9 @@ class misfit(object):
         return fig
     
 if __name__ == '__main__':
-    np.random.seed(2021)
+    np.random.seed(2022)
     # define the misfit
-    msft = misfit(fltnz=1.1)
+    msft = misfit(fltnz=2)
     # test
     nll=msft.cost(msft.obs)
     grad=msft.grad(msft.obs)

@@ -112,5 +112,8 @@ if __name__ == "__main__":
     xhat = GKS(A, b, L, 1, 5, 0, 0)
 
     xx = np.reshape(xhat, (128,128,33), order="F")
-    plt.imshow(xx[:,:,0])
-    breakpoint()
+    plt.set_cmap('Greys')
+    for i in range(xx.shape[2]):
+        plt.imshow(xx[:,:,i])
+        plt.savefig('./data/emoji_'+str(i)+'.png',bbox_inches='tight')
+        # plt.show()

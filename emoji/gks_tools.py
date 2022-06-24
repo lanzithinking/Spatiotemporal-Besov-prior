@@ -15,7 +15,7 @@ def lanczos_biortho_pasha(A, guess, iter):
     U = np.zeros(shape=(N, iter+1))
     V = np.zeros(shape=(M, iter))
 
-    v = np.zeros(shape=(M,1))
+    v = np.zeros(M)
     # normalize initial guess
     beta = np.linalg.norm(guess)
 
@@ -23,7 +23,7 @@ def lanczos_biortho_pasha(A, guess, iter):
 
     u = guess/beta
 
-    U[:,[0]] = u
+    U[:,0] = u
      
     alphas = np.zeros(shape=(iter+1))
     betas = np.zeros(shape=(iter+2))
@@ -58,14 +58,14 @@ def lanczos_biortho_pasha(A, guess, iter):
         betas[ii] = beta
         u = p / beta
 
-        U[:, [ii+1]] = u
+        U[:, ii+1] = u
 
     return (U, betas, alphas, V)
 
 
 def GKS(A, b, L, lanczos_dim, iter, delta, eta):
 
-    (U, beta, V) = lanczos_biortho_pasha(A, b, lanczos_dim) # Find a small basis V
+    (U, beta, alpha, V) = lanczos_biortho_pasha(A, b, lanczos_dim) # Find a small basis V
 
     for ii in range(iter):
 

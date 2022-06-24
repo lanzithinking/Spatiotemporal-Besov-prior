@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
-Class definition of dynamic linear inverse problem
-Shiwei Lan @ ASU 2021
----------------------------------------------------------------
-Created February 15, 2022 for project of Bayesian Spatiotemporal inverse problem (B-STIP)
+Class definition of linear inverse problem
+Shiwei Lan @ ASU 2022
+--------------------------------------------------------------------------
+Created February 15, 2022 for project of Spatiotemporal Besov prior (STBP)
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2021, The Bayesian STIP project"
+__copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -28,7 +28,7 @@ from misfit import *
 import warnings
 warnings.simplefilter('once')
 
-class dynLin:
+class Linv:
     def __init__(self,**kwargs):
         """
         Initialize the dynamic inverse problem by defining the prior model and the misfit (likelihood) model.
@@ -36,10 +36,10 @@ class dynLin:
         self.KL_truc=kwargs.pop('KL_truc', 100)
         
         # define the inverse problem with prior, and misfit
-        seed = kwargs.pop('seed',2021)
+        seed = kwargs.pop('seed',2022)
         self.setup(seed,**kwargs)
     
-    def setup(self, seed=2021, **kwargs):
+    def setup(self, seed=2022, **kwargs):
         """
         Set up the prior and the likelihood (misfit: -log(likelihood)) and posterior
         """
@@ -227,24 +227,24 @@ class dynLin:
     
 if __name__ == '__main__':
     # set up random seed
-    seed=2021
+    seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    fltnz = 1.1
-    basis_opt = 'eigen'
+    fltnz = 2
+    basis_opt = 'Fourier'
     KL_truc = 2000
     sigma = 1
-    s = 1+1e-4
+    s = 1
     store_eig = True
-    dlin = dynLin(fltnz=fltnz, basis_opt=basis_opt, KL_truc=KL_truc, sigma=sigma, s=s, store_eig=store_eig, seed=seed)
+    linv = Linv(fltnz=fltnz, basis_opt=basis_opt, KL_truc=KL_truc, sigma=sigma, s=s, store_eig=store_eig, seed=seed)
     # test
-    dlin.test(1e-8)
+    linv.test(1e-8)
     # obtain MAP
-    map_v = dlin.get_MAP(SAVE=True)
+    map_v = linv.get_MAP(SAVE=True)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     #  compare it with the truth
-    true_param = dlin.misfit.truth
-    map_f = dlin.vec2fun(map_v).reshape(true_param.shape)
+    true_param = linv.misfit.truth
+    map_f = linv.vec2fun(map_v).reshape(true_param.shape)
     relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
     print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
     # report the minimum cost
@@ -252,7 +252,7 @@ if __name__ == '__main__':
     # print('Minimum cost: %.4f' % min_cost)
     # plot MAP
     import matplotlib.pyplot as plt
-    msft=dlin.misfit
+    msft=linv.misfit
     msft.obs=map_f
     fig=msft.plot_data()
     fig.axes[1].set_title('MAP',fontsize=16)

@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 """
-Class definition of Besov prior for dynamic linear model.
----------------------------------------------------------------
-Created February 15, 2022 for project of Bayesian Spatiotemporal inverse problem (B-STIP)
+Class definition of Besov prior for linear model.
+--------------------------------------------------------------------------
+Created February 15, 2022 for project of Spatiotemporal Besov prior (STBP)
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2021, The Bayesian STIP project"
+__copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -19,13 +19,13 @@ import scipy.sparse as sps
 # self defined modules
 import os,sys
 sys.path.append( "../" )
-from util.stbsv.Besov import Besov
+from util.stbp.BSV import BSV
 
 # set to warn only once for the same warnings
 import warnings
 warnings.simplefilter('once')
 
-class prior(Besov):
+class prior(BSV):
     """
     Besov prior measure B(mu,_C) defined on 2d domain V.
     """
@@ -125,10 +125,10 @@ class prior(Besov):
         
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    np.random.seed(2021)
+    np.random.seed(2022)
     # define the prior
     meshsz=128
-    prior = prior(meshsz=meshsz, basis_opt='Fourier', q=1.0, L=400, space='fun')
+    prior = prior(meshsz=meshsz, basis_opt='Fourier', q=1.0, L=1000, space='fun')
     # generate sample
     u=prior.sample()
     nlogpri=prior.cost(u)

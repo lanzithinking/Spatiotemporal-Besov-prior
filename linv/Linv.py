@@ -14,7 +14,6 @@ __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import numpy as np
 from scipy import optimize
-import scipy.sparse.linalg as spsla
 
 # self defined modules
 import os,sys
@@ -31,7 +30,7 @@ warnings.simplefilter('once')
 class Linv:
     def __init__(self,**kwargs):
         """
-        Initialize the dynamic inverse problem by defining the prior model and the misfit (likelihood) model.
+        Initialize the linear inverse problem by defining the prior model and the misfit (likelihood) model.
         """
         self.KL_truc=kwargs.pop('KL_truc', 100)
         
@@ -50,8 +49,6 @@ class Linv:
         self.misfit = misfit(**kwargs)
         print('\nLikelihood model is obtained.')
         # set prior
-        if kwargs.get('basis_opt')=='eigen':
-            kwargs['A_op'] = spsla.LinearOperator((np.prod(self.misfit.size),)*2,matvec=self.misfit._proj)
         self.prior = prior(meshsz=self.misfit.size,L=self.KL_truc,**kwargs)
         print('\nPrior model is specified.')
         # set low-rank approximate Gaussian posterior

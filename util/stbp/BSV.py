@@ -170,7 +170,7 @@ class BSV:
         """
         alpha=kwargs.get('alpha',1)
         eigv,eigf = self.eigs() # obtain eigen-basis
-        if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+        if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
         C = (eigf*pow(eigv,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
         # if self.spdapx and not sps.issparse(C):
         #     warnings.warn('Possible memory overflow!')
@@ -186,7 +186,7 @@ class BSV:
             Cv=multf(self.tomat(alpha=alpha),v,transp)
         else:
             eigv,eigf = self.eigs() # obtain eigen-pairs
-            if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+            if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
             eigv_ = pow(eigv,alpha)
             prun=kwargs.get('prun',True) and self.comm # control of parallel run
             if prun:
@@ -262,7 +262,7 @@ class BSV:
         """
         eigv,_=self.eigs()
         abs_eigv=abs(eigv)
-        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(np.float).eps]))
+        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
         return ldet
     
     def logpdf(self,X):

@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -37,18 +37,17 @@ warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
     
 class STBP(BSV):
-    def __init__(self,spat,temp,Lambda=None,store_eig=False,**kwargs):
+    def __init__(self,spat,temp,store_eig=False,**kwargs):
         """
         Initialize the STBP class with spatial (BSV) class bsv, temporal (EPP) class epp and the dynamic eigenvalues Lambda
-        bsv: spatial class (discrete size I x L)
-        C_t: temporal class (discrete size J x L)
-        Lambda: dynamic (q-root) eigenvalues, discrete size J x L
+        spat: spatial class (discrete size I x L)
+        temp: temporal class (discrete size J x L)
+        gamma: decaying eigenvalues
         store_eig: indicator to store eigen-pairs, default to be false
-        jit: jittering term, default to be 1e-6
         spdapx: use speed-up or approximation
         -----------------------------------------------
         u(x,t) = sum_{l=1}^infty lambda_l(t) * phi_l(x)
-        lambda_l ~ EPP(0,cov,q)
+        lambda_l = gamma_l xi_l(t) ~ EPP(0,cov_l,q), xi_l ~ EPP(0, C, q)
         phi_l - basis of Besov prior
         """
         if type(spat) is BSV:
@@ -59,16 +58,14 @@ class STBP(BSV):
             self.epp=temp # temporal class
         else:
             self.epp=EPP(temp,store_eig=store_eig or Lambda is None,**kwargs)
-        self.Lambda=Lambda if Lambda is not None else self.epp.eigf # dynamic eigenvalues
         self.parameters=kwargs # all parameters of the kernel
-        self.jit=self.parameters.get('jit',1e-6) # jitter
         self.I,self.J=self.bsv.N,self.epp.N # spatial and temporal dimensions
         self.N=self.I*self.J # joint dimension (number of total inputs per trial)
-        assert self.Lambda.shape[0]==self.J, "Size of Lambda does not match time-domain dimension!"
-        self.L=self.Lambda.shape[1]
+        self.L=self.bsv.L#*self.epp.L
         if self.L>self.I:
             warnings.warn("Karhunen-Loeve truncation number cannot exceed the size of spatial basis!")
-            self.L=self.I; self.Lambda=self.Lambda[:,:self.I]
+            self.L=self.I
+        self.gamma=pow(np.arange(1,self.L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
         try:
             self.comm=MPI.COMM_WORLD
         except:
@@ -84,17 +81,25 @@ class STBP(BSV):
         """
         Get kernel as matrix
         """
-        # C = BSV.tomat(self,**kwargs)
-        alpha=kwargs.get('alpha',1) # power of dynamic eigenvalues
-        Lambda_=pow(abs(self.Lambda)**self.bsv.q,alpha)
-        if alpha<0: Lambda_[abs(Lambda_)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+        alpha=kwargs.get('alpha',1)
+        eigv_=pow(self.gamma**self.bsv.q,alpha)
+        if alpha<0: eigv_[abs(eigv_)<np.finfo(float).eps]=np.finfo(float).eps
         _,Phi_x=self.bsv.eigs(self.L)
-        LambdaqPhi=Lambda_[:,None,:]*Phi_x[None,:,:] # (J,I,L)
-        LambdaqPhi=LambdaqPhi.dot(Phi_x.T)+((alpha>=0)*self.jit)*np.eye(self.I)[None,:,:] # (J,I,I)
-        C=sps.block_diag(LambdaqPhi,format='csr') # (IJ,IJ)
+        C_x=(Phi_x*eigv_[None,:]).dot(Phi_x.T) + ((alpha>=0)*self.bsv.jit)*sps.eye(self.I)
+        C=sps.block_diag((sps.csr_matrix(C_x),)*self.J,format='csr') # (IJ,IJ)
         # if self.spdapx and not sps.issparse(C):
         #     warnings.warn('Possible memory overflow!')
         return C
+    
+    # def tomat(self,**kwargs):
+    #     """
+    #     Get kernel as matrix
+    #     """
+    #     alpha=kwargs.get('alpha',1)
+    #     C = np.kron(self.epp.tomat(alpha=alpha),self.bsv.tomat(alpha=alpha)) # (IJ,IJ)
+    #     # if self.spdapx and not sps.issparse(C):
+    #     #     warnings.warn('Possible memory overflow!')
+    #     return C
     
     def mult(self,v,**kwargs):
         """
@@ -107,7 +112,7 @@ class STBP(BSV):
             Cv=self.tomat(alpha=alpha).dot(v)
         else:
             eigv,eigf = self.eigs() # obtain eigen-pairs
-            if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+            if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
             eigv_ = pow(eigv,alpha)
             prun=kwargs.get('prun',True) and self.comm # control of parallel run
             if prun:
@@ -128,8 +133,24 @@ class STBP(BSV):
             if not prun:
 #                 Cv=np.concatenate([multf(eigf_i*eigv,multf(eigf.T,v)) for eigf_i in eigf])
                 Cv=multf(eigf.multiply(eigv_),multf(eigf.T,v))
-            Cv+=self.jit*v
+            Cv+=self.bsv.jit*v
         return Cv
+    
+    # def mult(self,v,**kwargs):
+    #     """
+    #     Kernel multiply a function (vector): C*v
+    #     """
+    #     alpha=kwargs.pop('alpha',1) # power of dynamic eigenvalues
+    #     if not self.spdapx:
+    #         if v.shape[0]!=self.N:
+    #             v=v.reshape((self.N,-1),order='F')
+    #         Cv=self.tomat(alpha=alpha).dot(v)
+    #     else:
+    #         if v.shape[0]!=self.I:
+    #             v=v.reshape((self.I,self.J,-1),order='F')
+    #         if np.ndim(v)<3: v=v[:,:,None]
+    #         Cv=self.epp.act(self.bsv.mult(v,alpha=alpha),alpha=alpha,transp=True).reshape((self.N,-1),order='F') # (IJ,K_)
+    #     return Cv
     
     def solve(self,v,**kwargs):
         """
@@ -144,11 +165,10 @@ class STBP(BSV):
         """
         if L is None:
             L=self.L;
-        if L>self.L:
-            L=self.L; warnings.warn('Requested too many eigenvalues!')
-        if upd or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
+        if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
             L=min(L,self.N)
-            eigv=abs(self.Lambda[:,:L].flatten())**self.bsv.q # (LJ,1)
+            gamma=self.gamma[:L] if L <=self.L else pow(np.arange(1,L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
+            eigv=np.tile(gamma**self.bsv.q,self.J) # (LJ,)
             _,Phi_x=self.bsv.eigs(L);
             eigf=sps.kron(sps.eye(self.J),Phi_x).tocsc() # (IJ,LJ)
         else:
@@ -157,6 +177,27 @@ class STBP(BSV):
                 eigv=eigv.reshape((-1,self.L))[:,:L].flatten(); # (LJ,1)
                 eigf=eigf.reshape((self.N,-1,self.L))[:,:,:L].reshape((self.N,-1)) # (IJ,LJ)
         return eigv,eigf
+    
+    # def eigs(self,L=None,upd=False,**kwargs):
+    #     """
+    #     Obtain partial eigen-basis
+    #     C * eigf_i = eigf_i * eigv_i, i=1,...,L
+    #     """
+    #     if L is None:
+    #         L=self.L;
+    #     if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
+    #         L=min(L,self.N)
+    #         lambda_t,Phi_t=self.epp.eigs(); lambda_x,Phi_x=self.bsv.eigs()
+    #         eigv=np.kron(lambda_t,lambda_x); eigf=np.kron(Phi_t,Phi_x) # (IJ,L)
+    #         if L<=self.bsv.L*self.epp.L:
+    #             eigv=eigv[:L]; eigf=eigf[:,:L]
+    #         else:
+    #             warnings.warn('Requested too many eigenvalues!')
+    #     else:
+    #         eigv,eigf=self.eigv,self.eigf
+    #         if L<self.L:
+    #             eigv=eigv[:L]; eigf=eigf[:,:L]
+    #     return eigv,eigf
     
     def act(self,x,alpha=1,**kwargs):
         """
@@ -169,28 +210,25 @@ class STBP(BSV):
         """
         Compute log-determinant of the kernel C: log|C|
         """
-        abs_eigv=abs(self.Lambda)
-        ldet=self.bsv.q*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(np.float).eps]))
-        return ldet
+        return BSV.logdet(self)
     
     def logpdf(self,X):
         """
         Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
         """
         if not self.spdapx:
-            _,eigf = self.eigs()
-            proj_X = eigf.T.dot(self.act(X, alpha=-1/self.bsv.q))
-            q_ldet=-X.shape[1]*self.logdet()/self.bsv.q
+            logpdf,q_ldet=BSV.logpdf(self,self.epp.act(X.reshape((self.J,self.I,-1)).reshape((self.N,-1)),alpha=-.5))
         else:
-            _,eigf=self.eigs()
-            qrt_eigv=abs(self.Lambda.flatten())+self.jit
-            q_ldet=-X.shape[1]*np.sum(np.log(qrt_eigv))
-            proj_X=eigf.T.dot(X)/qrt_eigv[:,None]
-        qsum=-0.5*np.sum(abs(proj_X)**self.bsv.q)
-        logpdf=q_ldet+qsum
+            q_ldet=-X.shape[1]*self.logdet()/self.bsv.q
+            _,Phi_x=self.bsv.eigs();
+            proj_X=Phi_x.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
+            proj_X=proj_X.reshape((self.J,-1))
+            epp_norm=self.epp.logpdf(proj_X,out='norms')
+            qsum=-0.5*np.sum(epp_norm**(self.bsv.q/self.epp.q))
+            logpdf=q_ldet+qsum
         return logpdf,q_ldet
     
-    def update(self,bsv=None,epp=None,Lambda=None):
+    def update(self,bsv=None,epp=None):
         """
         Update the eigen-basis
         """
@@ -198,50 +236,17 @@ class STBP(BSV):
             self.bsv=bsv; self.I=self.bsv.N; self.N=self.I*self.J
         if epp is not None:
             self.epp=C_t; self.J=self.epp.N; self.N=self.I*self.J
-        if Lambda is not None:
-            assert Lambda.shape[0]==self.J, "Size of Lambda does not match time-domain dimension!"
-            self.Lambda=Lambda; self.L=self.Lambda.shape[1]
-            if self.L>self.I:
-                warnings.warn("Karhunen-Loeve truncation number cannot exceed the size of spatial basis!")
-                self.L=self.I; self.Lambda=self.Lambda[:,:self.I]
         if self.store_eig:
             self.eigv,self.eigf=self.eigs(upd=True)
         return self
-    
-    def scale_Lambda(self,Lambda=None,opt='up'):
-        """
-        Scale Lambda with the decaying rate
-        u=lambda * gamma^(-alpha), gamma_l=l^(-kappa/2)
-        """
-        if Lambda is None:
-            Lambda=self.Lambda; L=self.L
-        else:
-            L=Lambda.shape[1]
-        if opt in ('u','up'):
-            alpha=1
-        elif opt in ('d','dn','down'):
-            alpha=-1
-        else:
-            alpha=0
-        try:
-            gamma=pow(np.arange(1,L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
-        except (TypeError,ValueError):
-            gamma,_=self.bsv.eigs(L)
-            gamma=abs(gamma)**(1./self.bsv.q)
-        gamma=gamma[None,:]
-        if np.ndim(Lambda)>2: gamma=gamma[:,:,None]
-        U=Lambda/pow(gamma,alpha)
-        return U
     
     def rnd(self,n=1):
         """
         Generate spatiotemporal Besov random function (vector) rv ~ STBP(0,C,q)
         """
-        epd_rv=self.scale_Lambda(self.epp.rnd(n=self.L*n).reshape((-1,self.L,n),order='F'), 'down')#.reshape((-1,n)) # (LJ,n)
-        # _,eigf=self.eigs()
-        # rv=eigf.dot(epd_rv) # (N,n)
-        _,Phi_x=self.bsv.eigs(self.L);
-        rv=Phi_x.dot(epd_rv).reshape((-1,n),order='F') # (N,n)
+        epp_rv=self.epp.rnd(n=self.L*n).reshape((-1,self.L,n),order='F')*self.gamma[None,:,None] # (J,L,n)
+        _,Phi_x=self.bsv.eigs();
+        rv=Phi_x.dot(epp_rv).reshape((-1,n),order='F') # (N,n)
         return rv
 
 if __name__=='__main__':
@@ -254,16 +259,15 @@ if __name__=='__main__':
     ## spatial class
     # x=np.random.rand(64**2,2)
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
-    xx,yy=np.meshgrid(np.linspace(0,1,32),np.linspace(0,1,32))
+    xx,yy=np.meshgrid(np.linspace(0,1,64),np.linspace(0,1,64))
     x=np.stack([xx.flatten(),yy.flatten()]).T
     bsv=BSV(x,L=100,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
     ## temporal class
     t=np.linspace(0,1,10)[:,np.newaxis]
     # x=np.random.rand(100,1) 
-    epp=EPP(t,L=10,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=1.5)
+    epp=EPP(t,L=10,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=2)
     ## spatiotemporal class
-    Lambda=epp.rnd(n=100)
-    stbp=STBP(bsv,epp,Lambda,store_eig=True)
+    stbp=STBP(bsv,epp,store_eig=True)
     verbose=stbp.comm.rank==0 if stbp.comm is not None else True
     if verbose:
         print('Eigenvalues :', np.round(stbp.eigv[:min(10,stbp.L)],4))
@@ -284,13 +288,13 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t2-t1))
 
-    v=stbp.rnd(n=2)
-    invCv=spsla.spsolve(C,v)
-#     C_op=spsla.LinearOperator((stbp.N,)*2,matvec=lambda v:stbp.mult(v))
-#     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
-    invCv_te=stbp.act(v,-1)
-    if verbose:
-        print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
+#     v=stbp.rnd(n=2)
+#     invCv=spsla.spsolve(C,v)
+# #     C_op=spsla.LinearOperator((stbp.N,)*2,matvec=lambda v:stbp.mult(v))
+# #     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
+#     invCv_te=stbp.act(v,-1)
+#     if verbose:
+#         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
 
     X=stbp.rnd(n=10)
     logpdf,_=stbp.logpdf(X)
@@ -306,7 +310,7 @@ if __name__=='__main__':
     h=1e-6
     dlogpdfv_fd=(stbp2.logpdf(u+h*v)[0]-stbp2.logpdf(u)[0])/h
     dlogpdfv=-stbp2.solve(u).T.dot(v)
-    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v) # this in general is not small because of C_t; try small correlation length in EPP, e.g. l=0.001 
     if verbose:
         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
     if verbose:

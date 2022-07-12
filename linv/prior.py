@@ -7,14 +7,14 @@ Created February 15, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
 import os
 import numpy as np
 import scipy as sp
-import scipy.sparse as sps
+from scipy.stats import gennorm
 
 # self defined modules
 import os,sys
@@ -85,12 +85,12 @@ class prior(BSV):
     def sample(self):
         """
         Sample a random function u ~ B(0,_C)
-        vector u ~ B(0,K): u = gamma |xi|^(1/q), xi ~ Lap(0,1)
+        vector u ~ B(0,K): u = gamma |xi|^(1/q), xi ~ EPD(0,1)
         """
         if self.space=='vec':
-            lap_rv=np.random.laplace(size=self.L) # (L,n)
+            epd_rv=gennorm.rvs(beta=self.q,scale=2**(1.0/self.q),size=self.L) # (L,)
             eigv,eigf=self.eigs()
-            u=np.sign(lap_rv)*(eigv*abs(lap_rv))**(1/self.q) # (L,n)
+            u=eigv**(1/self.q)*epd_rv # (L,)
         elif self.space=='fun':
             u=super().rnd(n=1).squeeze()
             if self.mean is not None:
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     np.random.seed(2022)
     # define the prior
     meshsz=128
-    prior = prior(meshsz=meshsz, basis_opt='Fourier', q=1.0, L=1000, space='fun')
+    prior = prior(meshsz=meshsz, basis_opt='Fourier', q=1., L=1000, space='fun')
     # generate sample
     u=prior.sample()
     nlogpri=prior.cost(u)

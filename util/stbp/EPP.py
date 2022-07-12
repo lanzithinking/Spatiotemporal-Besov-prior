@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -114,16 +114,22 @@ class EPP:
         C*=self.sigma2
         return C
     
-    def tomat(self):
+    def tomat(self,**kwargs):
         """
         Get kernel as matrix
         """
-        kerf=getattr(self,'_'+self.ker_opt) # obtain kernel function
-        C=kerf(self.x)
-        if type(C) is np.matrix:
-            C=C.getA()
-        if self.spdapx and not sps.issparse(C):
-            warnings.warn('Possible memory overflow!')
+        alpha=kwargs.get('alpha',1)
+        if alpha==1:
+            kerf=getattr(self,'_'+self.ker_opt) # obtain kernel function
+            C=kerf(self.x)
+            if type(C) is np.matrix:
+                C=C.getA()
+            if self.spdapx and not sps.issparse(C):
+                warnings.warn('Possible memory overflow!')
+        else:
+            eigv,eigf=self.eigs() # obtain eigen-basis
+            if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
+            C=(eigf*pow(eigv,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
         return C
     
     def mult(self,v,**kwargs):
@@ -189,7 +195,7 @@ class EPP:
             tol=kwargs.pop('tol',1e-10)
             C_op=self.tomat() if not self.spdapx else spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,**kwargs))
             try:
-                eigv,eigf=spsla.eigsh(C_op,min(L,C_op.shape[0]),maxiter=maxiter,tol=tol)
+                eigv,eigf=spsla.eigsh(C_op,min(L,C_op.shape[0]-1),maxiter=maxiter,tol=tol)
             except Exception as divg:
                 print(*divg.args)
                 eigv,eigf=divg.eigenvalues,divg.eigenvectors
@@ -214,7 +220,7 @@ class EPP:
             y=self.solve(x,**kwargs)
         else:
             eigv,eigf=self.eigs(**kwargs)
-            if alpha<0: eigv[abs(eigv)<np.finfo(np.float).eps]=np.finfo(np.float).eps
+            if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
             y=multf(eigf*pow(eigv,alpha),multf(eigf.T,x,transp),transp)
         return y
     
@@ -224,10 +230,10 @@ class EPP:
         """
         eigv,_=self.eigs()
         abs_eigv=abs(eigv)
-        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(np.float).eps]))
+        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
         return ldet
     
-    def logpdf(self,X,chol=True):
+    def logpdf(self,X,chol=True,out='logpdf'):
         """
         Compute logpdf of centered exponential power distribution X ~ EPD(0,C,q)
         """
@@ -236,24 +242,28 @@ class EPP:
             if chol:
                 try:
                     cholC,lower=spla.cho_factor(self.tomat())
-                    half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC)))
+                    if out=='logpdf': half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC)))
                     quad=X*spla.cho_solve((cholC,lower),X)
                 except Exception as e:#spla.LinAlgError:
                     warnings.warn('Cholesky decomposition failed: '+str(e))
                     chol=False
                     pass
             if not chol:
-                half_ldet=-X.shape[1]*self.logdet()/2
+                if out=='logpdf': half_ldet=-X.shape[1]*self.logdet()/2
                 quad=X*self.solve(X)
         else:
             eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit]+=self.jit
-            half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
+            if out=='logpdf': half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
             half_quad=eigf.T.dot(X)/rteigv[:,None]
             quad=half_quad**2
-        quad=-0.5*np.sum(quad)**(self.q/2)
-        # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
-        logpdf=half_ldet+quad#+scal_fctr
-        return logpdf,half_ldet#,scal_fctr
+        norms=abs(np.sum(quad,axis=0))**(self.q/2)
+        if out=='logpdf':
+            quad=-0.5*np.sum(norms)
+            # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
+            logpdf=half_ldet+quad#+scal_fctr
+            return logpdf,half_ldet#,scal_fctr
+        elif out=='norms':
+            return norms
     
     def update(self,sigma2=None,l=None):
         """

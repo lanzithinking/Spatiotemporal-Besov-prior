@@ -8,7 +8,7 @@ Created July 5, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -30,8 +30,6 @@ class emoji:
         """
         Initialize the dynamic inverse problem by defining the prior model and the misfit (likelihood) model.
         """
-        self.KL_truc=kwargs.pop('KL_truc', 100)
-        
         # define the inverse problem with prior, and misfit
         seed = kwargs.pop('seed',2022)
         self.setup(seed,**kwargs)
@@ -47,14 +45,14 @@ class emoji:
         self.misfit = misfit(**kwargs)
         print('\nLikelihood model is obtained.')
         # set prior
-        self.prior = prior(sz_x=self.misfit.sz_x,sz_t=self.misfit.sz_t,L=self.KL_truc,**kwargs)
+        self.prior = prior(sz_x=self.misfit.sz_x,sz_t=self.misfit.sz_t,**kwargs)
         print('\nPrior model is specified.')
         # set low-rank approximate Gaussian posterior
         # self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
         # print('\nApproximate posterior model is set.\n')
         # obtain an initial parameter from a rough reconstruction by anisoTV
         self.init_parameter = self.prior.fun2vec(self.misfit.reconstruct_anisoTV())
-        self.prior.mean = self.init_parameter
+        # self.prior.mean = self.init_parameter
     
     def _get_misfit(self, parameter, MF_only=True):
         """
@@ -126,7 +124,7 @@ class emoji:
         print( sep, "Find the MAP point", sep)
         # set up initial point
         # param0 = self.prior.sample('vec')
-        param0 = self.init_parameter + .1*self.prior.sample('vec',0)
+        param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
         global Nfeval
@@ -139,8 +137,8 @@ class emoji:
         # solve for MAP
         start = time.time()
         # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-        # res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-        res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
+        res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':1000,'disp':True})
+        # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
         end = time.time()
         print('\nTime used is %.4f' % (end-start))
         # print out info
@@ -213,12 +211,10 @@ if __name__ == '__main__':
     seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    basis_opt = 'Fourier'
-    KL_truc = 1000
-    # sigma2 = 1
-    # s = 1
+    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
+    temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
     store_eig = True
-    emj = emoji(basis_opt=basis_opt, KL_truc=KL_truc, store_eig=store_eig, seed=seed)
+    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
     # test
     emj.test(1e-8)
     # obtain MAP

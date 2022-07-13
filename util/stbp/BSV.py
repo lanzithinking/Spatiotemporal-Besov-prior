@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -44,7 +44,7 @@ class BSV:
         L: truncation number in Mercer's series
         store_eig: indicator to store eigen-pairs, default to be false
         sigma2: magnitude, default to be 1
-        l: correlation length, default to be 0.5
+        l: inverse correlation length, default to be 0.5
         s: smoothness, default to be 2
         q: norm power, default to be 1
         jit: jittering term, default to be 1e-6
@@ -317,7 +317,7 @@ if __name__=='__main__':
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
     xx,yy=np.meshgrid(np.linspace(0,1,128),np.linspace(0,1,128))
     x=np.stack([xx.flatten(),yy.flatten()]).T
-    bsv=BSV(x,L=1000,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
+    bsv=BSV(x,L=1000,store_eig=True,basis_opt='wavelet', l=5, q=1.0) # constrast with q=2.0
     verbose=bsv.comm.rank==0 if bsv.comm is not None else True
     if verbose:
         print('Eigenvalues :', np.round(bsv.eigv[:min(10,bsv.L)],4))
@@ -327,6 +327,7 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t1-t0))
 
+    u_samp=bsv.rnd(n=25)
     v=bsv.rnd(n=2)
     C=bsv.tomat()
     Cv=C.dot(v)
@@ -354,12 +355,12 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t3-t2))
 
-    bsv2=bsv; bsv2.q=2; bsv2=bsv2.update(l=bsv.l)
-    u=bsv2.rnd()
-    v=bsv2.rnd()
+    bsv.q=2;
+    u=bsv.rnd()
+    v=bsv.rnd()
     h=1e-6
-    dlogpdfv_fd=(bsv2.logpdf(u+h*v)[0]-bsv2.logpdf(u)[0])/h
-    dlogpdfv=-bsv2.solve(u).T.dot(v)
+    dlogpdfv_fd=(bsv.logpdf(u+h*v)[0]-bsv.logpdf(u)[0])/h
+    dlogpdfv=-bsv.solve(u).T.dot(v)
     rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
     if verbose:
         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
@@ -374,9 +375,8 @@ if __name__=='__main__':
         ax.set_aspect('auto')
     plt.show()
     
-    u=bsv.rnd(n=25)
     fig, axes=plt.subplots(nrows=5,ncols=5,sharex=True,sharey=True,figsize=(15,12))
     for i,ax in enumerate(axes.flat):
-        ax.imshow(u[:,i].reshape((int(np.sqrt(u.shape[0])),-1)),origin='lower')
+        ax.imshow(u_samp[:,i].reshape((int(np.sqrt(u_samp.shape[0])),-1)),origin='lower')
         ax.set_aspect('auto')
     plt.show()

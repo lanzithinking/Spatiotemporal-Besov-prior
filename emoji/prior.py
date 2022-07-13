@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -37,10 +37,10 @@ class prior(STBP):
         else:
             self.sz_x=sz_x # I = np.prod(sz_x)
         xx,yy=np.meshgrid(np.linspace(0,1,self.sz_x[0]),np.linspace(0,1,self.sz_x[1]))
-        bsv=BSV(x=np.stack([xx.flatten(),yy.flatten()]).T,store_eig=store_eig,**kwargs)
+        bsv=BSV(x=np.stack([xx.flatten(),yy.flatten()]).T,store_eig=store_eig,**kwargs.pop('spat_args',{}))
         self.sz_t=sz_t # J = sz_t
         t=np.linspace(0,1,self.sz_t)
-        epp=EPP(x=t,store_eig=store_eig,**kwargs)
+        epp=EPP(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{}))
         self.space=kwargs.pop('space','vec') # alternative 'fun'
         super().__init__(spat=bsv, temp=epp, store_eig=store_eig, **kwargs) # N = I*J
         self.mean=mean
@@ -139,19 +139,21 @@ if __name__ == '__main__':
     np.random.seed(2022)
     # define the prior
     sz_x=128; sz_t=20
-    prior = prior(sz_x=sz_x, sz_t=sz_t, basis_opt='Fourier', q=1.0, L=100, space='fun')
+    spat_args={'basis_opt':'Fourier','l':1,'s':1.5,'q':1.0,'L':1000}
+    temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
+    prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='fun')
     # generate sample
     u=prior.sample()
     nlogpri=prior.cost(u)
     ngradpri=prior.grad(u)
     print('The negative logarithm of prior density at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nlogpri,np.linalg.norm(ngradpri)))
-    # test
-    h=1e-7
-    v=prior.sample()
-    ngradv_fd=(prior.cost(u+h*v)-nlogpri)/h
-    ngradv=ngradpri.flatten().dot(v)
-    rdiff_gradv=np.abs(ngradv_fd-ngradv)/np.linalg.norm(v)
-    print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+    # # test
+    # h=1e-7
+    # v=prior.sample()
+    # ngradv_fd=(prior.cost(u+h*v)-nlogpri)/h
+    # ngradv=ngradpri.flatten().dot(v)
+    # rdiff_gradv=np.abs(ngradv_fd-ngradv)/np.linalg.norm(v)
+    # print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
     # plot
     import matplotlib.pyplot as plt
     if u.shape[0]!=prior.N: u=prior.vec2fun(u)

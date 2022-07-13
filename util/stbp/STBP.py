@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -53,11 +53,11 @@ class STBP(BSV):
         if type(spat) is BSV:
             self.bsv=spat # spatial class
         else:
-            self.bsv=BSV(spat,store_eig=store_eig,**kwargs)
+            self.bsv=BSV(spat,store_eig=store_eig,**kwargs.pop('spat_args',{}))
         if type(temp) is EPP:
             self.epp=temp # temporal class
         else:
-            self.epp=EPP(temp,store_eig=store_eig or Lambda is None,**kwargs)
+            self.epp=EPP(temp,store_eig=store_eig or Lambda is None,**kwargs.pop('temp_args',{}))
         self.parameters=kwargs # all parameters of the kernel
         self.I,self.J=self.bsv.N,self.epp.N # spatial and temporal dimensions
         self.N=self.I*self.J # joint dimension (number of total inputs per trial)
@@ -277,6 +277,7 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t1-t0))
 
+    u_samp=stbp.rnd(n=5).reshape((stbp.I,stbp.J,-1),order='F')
     v=stbp.rnd(n=2)
     C=stbp.tomat()
     Cv=C.dot(v)
@@ -304,12 +305,12 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t3-t2))
 
-    stbp2=stbp; stbp2.bsv.q=2; stbp2=stbp2.update(bsv=stbp2.bsv.update(l=stbp.bsv.l))
-    u=stbp2.rnd()
-    v=stbp2.rnd()
+    stbp.bsv.q=2
+    u=stbp.rnd()
+    v=stbp.rnd()
     h=1e-6
-    dlogpdfv_fd=(stbp2.logpdf(u+h*v)[0]-stbp2.logpdf(u)[0])/h
-    dlogpdfv=-stbp2.solve(u).T.dot(v)
+    dlogpdfv_fd=(stbp.logpdf(u+h*v)[0]-stbp.logpdf(u)[0])/h
+    dlogpdfv=-stbp.solve(u).T.dot(v)
     rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v) # this in general is not small because of C_t; try small correlation length in EPP, e.g. l=0.001 
     if verbose:
         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
@@ -318,13 +319,12 @@ if __name__=='__main__':
     
     import matplotlib.pyplot as plt
     
-    u=stbp.rnd(n=5).reshape((stbp.I,stbp.J,-1),order='F')
     nrow=5; ncol=5
     fig, axes=plt.subplots(nrows=nrow,ncols=nrow,sharex=True,sharey=True,figsize=(15,12))
     for i in range(nrow):
         for j in range(ncol):
             ax=axes.flat[i*ncol+j]
-            ax.imshow(u[:,j,i].reshape((int(np.sqrt(u.shape[0])),-1)),origin='lower')
+            ax.imshow(u_samp[:,j,i].reshape((int(np.sqrt(u_samp.shape[0])),-1)),origin='lower')
             ax.set_aspect('auto')
             if i==0: ax.set_title('t='+str(j),fontsize=16)
     plt.show()

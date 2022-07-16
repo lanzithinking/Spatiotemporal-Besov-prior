@@ -50,9 +50,19 @@ class emoji:
         # set low-rank approximate Gaussian posterior
         # self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
         # print('\nApproximate posterior model is set.\n')
-        # obtain an initial parameter from a rough reconstruction by anisoTV
-        self.init_parameter = self.prior.fun2vec(self.misfit.reconstruct_anisoTV())
+        if kwargs.pop('init_param',False):
+            # obtain an initial parameter from a rough reconstruction
+            self._init_param()
         # self.prior.mean = self.init_parameter
+    
+    def _init_param(self,opt='LSE'):
+        """
+        Initialize parameter with a quick but rough reconstruction
+        """
+        reconstruction_method='reconstruct_'+opt
+        if hasattr(self.misfit, reconstruction_method):
+            reconstruct=getattr(self.misfit,reconstruction_method)
+        self.init_parameter = self.prior.fun2vec(reconstruct())
     
     def _get_misfit(self, parameter, MF_only=True):
         """
@@ -124,6 +134,7 @@ class emoji:
         print( sep, "Find the MAP point", sep)
         # set up initial point
         # param0 = self.prior.sample('vec')
+        if not hasattr(self, 'init_parameter'): self._init_param()
         param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
@@ -177,6 +188,7 @@ class emoji:
         """
         # random sample parameter
         # parameter = self.prior.sample('vec')
+        if not hasattr(self, 'init_parameter'): self._init_param()
         parameter = self.init_parameter
         
         # MF_only = True
@@ -211,8 +223,8 @@ if __name__ == '__main__':
     seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
-    temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
+    spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
+    temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
     # test
@@ -229,5 +241,5 @@ if __name__ == '__main__':
     # # min_cost = emj._get_misfit(map_v)
     # # print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = emj.prior.vec2fun(map_v)
+    map_f = emj.prior.vec2fun(map_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
     emj.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')

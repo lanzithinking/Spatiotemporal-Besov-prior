@@ -139,11 +139,12 @@ if __name__ == '__main__':
     np.random.seed(2022)
     # define the prior
     sz_x=128; sz_t=20
-    spat_args={'basis_opt':'Fourier','l':1,'s':1.5,'q':1.0,'L':1000}
+    spat_args={'basis_opt':'Fourier','sigma2':1,'l':1,'s':1.5,'q':1.0,'L':1000}
     temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
     prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='fun')
     # generate sample
-    u=prior.sample()
+    # u=prior.sample()
+    u=np.random.rand(prior.N)
     nlogpri=prior.cost(u)
     ngradpri=prior.grad(u)
     print('The negative logarithm of prior density at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nlogpri,np.linalg.norm(ngradpri)))

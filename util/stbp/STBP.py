@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -65,7 +65,7 @@ class STBP(BSV):
         if self.L>self.I:
             warnings.warn("Karhunen-Loeve truncation number cannot exceed the size of spatial basis!")
             self.L=self.I
-        self.gamma=pow(np.arange(1,self.L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
+        self.gamma=self.bsv._qrteigv(self.L)
         try:
             self.comm=MPI.COMM_WORLD
         except:
@@ -167,7 +167,7 @@ class STBP(BSV):
             L=self.L;
         if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
             L=min(L,self.N)
-            gamma=self.gamma[:L] if L <=self.L else pow(np.arange(1,L+1),-(self.bsv.s/self.bsv.d+1./2-1./self.bsv.q))
+            gamma=self.gamma[:L] if L <=self.L else self.bsv._qrteigv(L)
             eigv=np.tile(gamma**self.bsv.q,self.J) # (LJ,)
             _,Phi_x=self.bsv.eigs(L);
             eigf=sps.kron(sps.eye(self.J),Phi_x).tocsc() # (IJ,LJ)

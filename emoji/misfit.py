@@ -8,14 +8,15 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import numpy as np
 import scipy as sp
 import scipy.sparse as sps
-import scipy.linalg as spla
+# import scipy.linalg as spla
+import scipy.sparse.linalg as spsla
 import h5py # needed to unpack downloaded emoji data (in .mat format)
 import os
 
@@ -35,10 +36,11 @@ class misfit(object):
         Initialize data-misfit class with information of observations.
         """
         self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
-        self.jit = kwargs.pop('jit',1e-3) # jitter to the noise covariance
+        # self.jit = kwargs.pop('jit',1e-3) # jitter to the noise covariance
         # get observations
         self.obs, nzcov, self.sz_x, self.sz_t = self.get_obs(**kwargs)
-        self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
+        # self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
+        self.nzcov = self.nzlvl * max(np.diag(nzcov)) * ( sps.eye(nzcov.shape[0]))
     
     def _gen_emoji(self):
         """
@@ -118,7 +120,8 @@ class misfit(object):
         val = 0
         for i in range(self.sz_t):
             dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
-            val += 0.5*np.sum(dif_obs*spla.solve(self.nzcov,dif_obs,sym_pos=True))
+            # val += 0.5*np.sum(dif_obs*spla.solve(self.nzcov,dif_obs,sym_pos=True))
+            val += 0.5*np.sum(dif_obs*spsla.spsolve(self.nzcov,dif_obs))
         return val
     
     def grad(self, u):
@@ -132,7 +135,8 @@ class misfit(object):
         g = []
         for i in range(self.sz_t):
             dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
-            g.append( ops_proj[i].T.dot(spla.solve(self.nzcov,dif_obs,sym_pos=True)) )
+            # g.append( ops_proj[i].T.dot(spla.solve(self.nzcov,dif_obs,sym_pos=True)) )
+            g.append( ops_proj[i].T.dot(spsla.spsolve(self.nzcov,dif_obs)) )
         return np.stack(g).T # (I,J)
     
     def _anisoTV(self, sz_x=None, sz_t=None):
@@ -156,6 +160,18 @@ class misfit(object):
         xhat = GKS(A, b, L, 1, 5, 0, 0)
         xx = np.reshape(xhat, (128,128,33), order="F")
         return xx
+    
+    def reconstruct_lse(self,lmda=0):
+        """
+        Reconstruct images by least square estimate
+        """
+        ops_proj, obs_proj = self.obs
+        x_hat = []
+        for i in range(self.sz_t):
+            # XX = ops_proj[i].T.dot(ops_proj[i]) + lmda * sps.eye(np.prod(self.sz_x))
+            # x_hat.append(spsla.spsolve(XX, ops_proj[i].T.dot(obs_proj[i])))
+            x_hat.append(spsla.lsqr(ops_proj[i],obs_proj[i],damp=lmda)[0])
+        return np.stack(x_hat).T
     
     def plot_reconstruction(self, rcstr_imgs, save_imgs=False, save_path='./reconstruction'):
         """
@@ -201,14 +217,26 @@ if __name__ == '__main__':
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     
-    # reconstruct the images by anisoTV
-    xx=msft.reconstruct_anisoTV()
-    # plot
-    # import matplotlib.pyplot as plt
-    msft.plot_reconstruction(xx)
+    # # reconstruct the images by anisoTV
+    # xx=msft.reconstruct_anisoTV()
+    # # plot
+    # # import matplotlib.pyplot as plt
+    # msft.plot_reconstruction(xx)
+    #
+    # # evaluate the likelihood at anisoTV reconstruction
+    # u=xx.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
+    # nll=msft.cost(u)
+    # grad=msft.grad(u)
+    # print('The negative logarithm of likelihood at anisoTV reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
     
-    # evaluate the likelihood at anisoTV reconstruction
-    u=xx.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
-    nll=msft.cost(u)
-    grad=msft.grad(u)
-    print('The negative logarithm of likelihood at anisoTV reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    # # reconstruct the images by LSE
+    # x_hat=msft.reconstruct_lse(lmda=10)
+    # # plot
+    # # import matplotlib.pyplot as plt
+    # msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE')
+    #
+    # # evaluate the likelihood at anisoTV reconstruction
+    # u=x_hat.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
+    # nll=msft.cost(u)
+    # grad=msft.grad(u)
+    # print('The negative logarithm of likelihood at LSE reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))

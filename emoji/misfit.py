@@ -161,7 +161,7 @@ class misfit(object):
         xx = np.reshape(xhat, (128,128,33), order="F")
         return xx
     
-    def reconstruct_lse(self,lmda=0):
+    def reconstruct_LSE(self,lmda=0):
         """
         Reconstruct images by least square estimate
         """
@@ -185,7 +185,7 @@ class misfit(object):
         for i in range(rcstr_imgs.shape[2]):
             plt.imshow(rcstr_imgs[:,:,i])
             plt.title('t = '+str(i),fontsize=16)
-            if save_imgs: plt.savefig(save_path+'/emoji_'+str(i)+'.png',bbox_inches='tight')
+            if save_imgs: plt.savefig(save_path+'/emoji_'+str(i).zfill(len(str(rcstr_imgs.shape[2])))+'.png',bbox_inches='tight')
             plt.pause(.1)
             plt.draw()
     
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     # xx=msft.reconstruct_anisoTV()
     # # plot
     # # import matplotlib.pyplot as plt
-    # msft.plot_reconstruction(xx)
+    # msft.plot_reconstruction(xx, save_imgs=True, save_path='./reconstruction/anisoTV')
     #
     # # evaluate the likelihood at anisoTV reconstruction
     # u=xx.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')

@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -61,6 +61,25 @@ class prior(STBP):
         val=0.5*np.sum(self.epp.logpdf(proj_u,out='norms')**(self.bsv.q/self.epp.q))
         return val
     
+    # def grad(self,u):
+    #     """
+    #     Calculate the gradient of log-prior
+    #     """
+    #     u_sz={'vec':self.L*self.J,'fun':self.N}[self.space]
+    #     if u.shape[0]!=u_sz:
+    #         u=u.reshape((u_sz,-1),order='F')
+    #     if self.mean is not None:
+    #         u-=self.mean
+    #
+    #     eigv, eigf=self.eigs()
+    #     eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
+    #     gamma=eigv**(1/self.bsv.q)
+    #     proj_u=((u if self.space=='vec' else eigf.T.dot(u) if self.space=='fun' else ValueError('Wrong space!'))/gamma).reshape((self.J,-1)) # (J,L)
+    #     epp_norm=self.epp.logpdf(proj_u,out='norms')**(1/self.epp.q) # (L,)
+    #     g=0.5*self.bsv.q*(epp_norm**(self.bsv.q-2) *self.epp.solve(proj_u)).reshape((self.L*self.J,-1))/gamma[:,None] # (LJ,)
+    #     if self.space=='fun': g=eigf.dot(g) # (N,)
+    #     return g.squeeze()
+    
     def grad(self,u):
         """
         Calculate the gradient of log-prior
@@ -70,14 +89,15 @@ class prior(STBP):
             u=u.reshape((u_sz,-1),order='F')
         if self.mean is not None:
             u-=self.mean
-        
-        eigv, eigf=self.eigs()
+    
+        eigv, eigf=self.bsv.eigs()
         eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
         gamma=eigv**(1/self.bsv.q)
-        proj_u=((u if self.space=='vec' else eigf.T.dot(u) if self.space=='fun' else ValueError('Wrong space!'))/gamma).reshape((self.J,-1)) # (J,L)
+        proj_u=((u.reshape((self.L,self.J,-1),order='F') if self.space=='vec' else eigf.T.dot(u.reshape((self.J,self.I,-1))) if self.space=='fun' else ValueError('Wrong space!'))/gamma[:,None,None]).swapaxes(0,1).reshape((self.J,-1),order='F') # (J,L)
         epp_norm=self.epp.logpdf(proj_u,out='norms')**(1/self.epp.q) # (L,)
-        g=0.5*self.bsv.q*(epp_norm**(self.bsv.q-2) *self.epp.solve(proj_u)).reshape((self.L*self.J,-1))/gamma[:,None] # (LJ,)
-        if self.space=='fun': g=eigf.dot(g) # (N,)
+        g=0.5*self.bsv.q*(epp_norm**(self.bsv.q-2) *self.epp.solve(proj_u)/gamma).swapaxes(0,1) # (L,J)
+        if self.space=='fun': g=eigf.dot(g) # (I,J)
+        g=g.reshape((u_sz,-1),order='F')
         return g.squeeze()
     
     def sample(self, output_space=None, mean=None):
@@ -101,38 +121,72 @@ class prior(STBP):
             u+=mean
         return u
     
+    # def C_act(self,u,comp=1):
+    #     """
+    #     Calculate operation of C^comp on vector u: u --> C^comp * u
+    #     """
+    #     u_sz={'vec':self.L*self.J,'fun':self.N}[self.space]
+    #     if u.shape[0]!=u_sz:
+    #         u=u.reshape((u_sz,-1),order='F')
+    #
+    #     if comp==0:
+    #         return u
+    #     else:
+    #         eigv, eigf=self.eigs()
+    #         if comp<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
+    #         Cu=(u if self.space=='vec' else eigf.T.dot(u) if self.space=='fun' else ValueError('Wrong space!'))*eigv**(comp)
+    #         return Cu
+    
     def C_act(self,u,comp=1):
         """
         Calculate operation of C^comp on vector u: u --> C^comp * u
         """
-        u_sz={'vec':self.L*self.J,'fun':self.N}[self.space]
-        if u.shape[0]!=u_sz:
-            u=u.reshape((u_sz,-1),order='F')
-        
+        u_sz0={'vec':self.L,'fun':self.I}[self.space]
+        if u.shape[0]!=u_sz0:
+            u=u.reshape((u_sz0,self.J,-1),order='F')
+    
         if comp==0:
             return u
         else:
-            eigv, eigf=self.eigs()
+            eigv, eigf=self.bsv.eigs()
             if comp<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
-            Cu=(u if self.space=='vec' else eigf.T.dot(u) if self.space=='fun' else ValueError('Wrong space!'))*eigv**(comp)
-            return Cu
+            Cu=(u if self.space=='vec' else eigf.T.dot(u.swapaxes(0,1)) if self.space=='fun' else ValueError('Wrong space!'))*eigv[:,None,None]**(comp)
+            return Cu.reshape((self.L*self.J,-1),order='F')
+    
+    # def vec2fun(self, u_vec):
+    #     """
+    #     Convert vector (u_i) to function (u)
+    #     """
+    #     if u_vec.shape[0]!=self.L*self.J: u_vec=u_vec.reshape((self.L*self.J,-1),order='F')
+    #     _, eigf = self.eigs()
+    #     u_f = eigf.dot(u_vec)
+    #     return np.squeeze(u_f)
     
     def vec2fun(self, u_vec):
         """
         Convert vector (u_i) to function (u)
         """
-        if u_vec.shape[0]!=self.L*self.J: u_vec=u_vec.reshape((self.L*self.J,-1),order='F')
-        _, eigf = self.eigs()
-        u_f = eigf.dot(u_vec)
+        if u_vec.shape[0]!=self.L: u_vec=u_vec.reshape((self.L,self.J,-1),order='F')
+        _, eigf = self.bsv.eigs()
+        u_f = eigf.dot(u_vec.swapaxes(0,1)).reshape((self.N,-1),order='F')
         return np.squeeze(u_f)
+    
+    # def fun2vec(self, u_f):
+    #     """
+    #     Convert vector (u_i) to function (u)
+    #     """
+    #     if u_f.shape[0]!=self.N: u_f=u_f.reshape((self.N,-1),order='F')
+    #     _, eigf = self.eigs()
+    #     u_vec = eigf.T.dot(u_f)
+    #     return np.squeeze(u_vec)
     
     def fun2vec(self, u_f):
         """
         Convert vector (u_i) to function (u)
         """
-        if u_f.shape[0]!=self.N: u_f=u_f.reshape((self.N,-1),order='F')
-        _, eigf = self.eigs()
-        u_vec = eigf.T.dot(u_f)
+        if u_f.shape[0]!=self.I: u_f=u_f.reshape((self.I,self.J,-1),order='F')
+        _, eigf = self.bsv.eigs()
+        u_vec = eigf.T.dot(u_f.swapaxes(0,1)).reshape((self.L*self.J,-1),order='F')
         return np.squeeze(u_vec)
     
 if __name__ == '__main__':
@@ -143,18 +197,18 @@ if __name__ == '__main__':
     temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
     prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='fun')
     # generate sample
-    # u=prior.sample()
-    u=np.random.rand(prior.N)
+    u=prior.sample()
+    # u=np.random.rand(prior.N)
     nlogpri=prior.cost(u)
     ngradpri=prior.grad(u)
     print('The negative logarithm of prior density at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nlogpri,np.linalg.norm(ngradpri)))
-    # # test
-    # h=1e-7
-    # v=prior.sample()
-    # ngradv_fd=(prior.cost(u+h*v)-nlogpri)/h
-    # ngradv=ngradpri.flatten().dot(v)
-    # rdiff_gradv=np.abs(ngradv_fd-ngradv)/np.linalg.norm(v)
-    # print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+    # test
+    h=1e-7
+    v=prior.sample()
+    ngradv_fd=(prior.cost(u+h*v)-nlogpri)/h
+    ngradv=ngradpri.flatten().dot(v)
+    rdiff_gradv=np.abs(ngradv_fd-ngradv)/np.linalg.norm(v)
+    print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
     # plot
     import matplotlib.pyplot as plt
     if u.shape[0]!=prior.N: u=prior.vec2fun(u)

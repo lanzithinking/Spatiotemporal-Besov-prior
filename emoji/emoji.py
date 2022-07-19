@@ -55,7 +55,7 @@ class emoji:
             self._init_param()
         # self.prior.mean = self.init_parameter
     
-    def _init_param(self,opt='LSE'):
+    def _init_param(self,opt='anisoTV'):
         """
         Initialize parameter with a quick but rough reconstruction
         """

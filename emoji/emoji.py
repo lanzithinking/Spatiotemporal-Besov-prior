@@ -55,14 +55,14 @@ class emoji:
             self._init_param()
         # self.prior.mean = self.init_parameter
     
-    def _init_param(self,opt='anisoTV'):
+    def _init_param(self,init_opt='anisoTV',**kwargs):
         """
         Initialize parameter with a quick but rough reconstruction
         """
-        reconstruction_method='reconstruct_'+opt
+        reconstruction_method='reconstruct_'+init_opt
         if hasattr(self.misfit, reconstruction_method):
             reconstruct=getattr(self.misfit,reconstruction_method)
-        self.init_parameter = self.prior.fun2vec(reconstruct())
+        self.init_parameter = self.prior.fun2vec(reconstruct(**kwargs))
     
     def _get_misfit(self, parameter, MF_only=True):
         """
@@ -125,7 +125,7 @@ class emoji:
         """
         raise NotImplementedError('eigs not implemented.')
     
-    def get_MAP(self,SAVE=False,*kwargs):
+    def get_MAP(self,SAVE=False,**kwargs):
         """
         Get the maximum a posterior (MAP).
         """
@@ -134,7 +134,7 @@ class emoji:
         print( sep, "Find the MAP point", sep)
         # set up initial point
         # param0 = self.prior.sample('vec')
-        if not hasattr(self, 'init_parameter'): self._init_param()
+        if not hasattr(self, 'init_parameter'): self._init_param(**kwargs)
         param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
@@ -227,10 +227,10 @@ if __name__ == '__main__':
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
-    # test
-    emj.test(1e-8)
+    # # test
+    # emj.test(1e-8)
     # obtain MAP
-    map_v = emj.get_MAP(SAVE=True)
+    map_v = emj.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     # #  compare it with the truth
     # true_param = emj.misfit.truth # no truth

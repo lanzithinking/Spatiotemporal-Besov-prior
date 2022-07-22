@@ -142,8 +142,8 @@ class prior(STBP):
         Calculate operation of C^comp on vector u: u --> C^comp * u
         """
         u_sz0={'vec':self.L,'fun':self.I}[self.space]
-        if u.shape[0]!=u_sz0:
-            u=u.reshape((u_sz0,self.J,-1),order='F')
+        if u.shape[0]!=u_sz0: u=u.reshape((u_sz0,self.J,-1),order='F')
+        if np.ndim(u)==2: u=u[:,:,None]
     
         if comp==0:
             return u
@@ -167,6 +167,7 @@ class prior(STBP):
         Convert vector (u_i) to function (u)
         """
         if u_vec.shape[0]!=self.L: u_vec=u_vec.reshape((self.L,self.J,-1),order='F')
+        if np.ndim(u_vec)==2: u_vec=u_vec[:,:,None]
         _, eigf = self.bsv.eigs()
         u_f = eigf.dot(u_vec.swapaxes(0,1)).reshape((self.N,-1),order='F')
         return np.squeeze(u_f)
@@ -185,6 +186,7 @@ class prior(STBP):
         Convert vector (u_i) to function (u)
         """
         if u_f.shape[0]!=self.I: u_f=u_f.reshape((self.I,self.J,-1),order='F')
+        if np.ndim(u_f)==2: u_f=u_f[:,:,None]
         _, eigf = self.bsv.eigs()
         u_vec = eigf.T.dot(u_f.swapaxes(0,1)).reshape((self.L*self.J,-1),order='F')
         return np.squeeze(u_vec)

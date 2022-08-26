@@ -30,16 +30,7 @@ warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWa
         
  
 def main(seed=2021):
-    '''
-    u=emj.prior.vec2fun(u0)
-    if u.shape[0]!=np.prod(emj.misfit.sz_x):
-        u=u.reshape((np.prod(emj.misfit.sz_x),-1),order='F') # (I,J)
     
-    #val = 0
-    for i in range(emj.misfit.sz_t):
-        dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
-        # val += 0.5*np.sum(dif_obs*spsla.spsolve(self.nzcov,dif_obs))
-    '''
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('mdlNO', nargs='?', type=int, default=0)
@@ -104,17 +95,17 @@ def main(seed=2021):
         enk = EnK(u0[:,:,i],G_,data,prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,
                   alg=args.algs[args.algNO],adpt=True)
         enk_fun=enk.run
-        enk_args=(args.max_iter,True,i)
+        enk_args=(args.max_iter,True)
         savepath,filename=enk_fun(*enk_args)
-        '''
+        
         # append extra information including the count of solving
         filename_=os.path.join(savepath,filename+'.pckl')
-        filename=os.path.join(savepath,'Lorenz_'+{True:'avg',False:'full','aug':'avgaug'}[lrz.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
+        filename=os.path.join(savepath,'Emoji_'+filename+'_Time'+str(i)+'.pckl') # change filename
         os.rename(filename_, filename)
         f=open(filename,'ab')
-        pickle.dump([obs_times,avg_traj,STlik,var_out,y,args],f)
+        pickle.dump([ops_proj, obs_proj, i, args],f)
         f.close()
-        '''
+        
         
     
     
@@ -124,64 +115,6 @@ def main(seed=2021):
     #error:ValueError: output array is read-only if Parallel
     #Parallel(n_jobs=n_jobs)(delayed(run_enk)(i) for i in range(J))
     
-    
-    '''
-    work with all time points
-    def G_(u, ops_proj=ops_proj):
-        #ops_proj[i]:(2170, 128**2), obs_proj[i]:(2170), both with 33(sz_t) length
-        
-        #u=emj.prior.vec2fun(u)
-        
-        if u.shape[0]!=np.prod(emj.misfit.sz_x):
-            u=u.reshape((np.prod(emj.misfit.sz_x),-1),order='F') # (I,J)
-        
-        G_u = []
-        for i in range(emj.misfit.sz_t):
-            G_ui = ops_proj[i].dot(u[:,i]) #(2170,)
-            G_u.append(G_ui)
-           
-        return np.array(G_u).reshape((33*2170))
-    
-    def G(u):
-        G_u = [G_(u0) for u0 in u]
-        
-        return np.array(G_u)
-    
-    #y: (33, 2170)
-    y=np.array([obs_proj[i] for i in range(emj.misfit.sz_t)]).reshape((1,J*obs_proj[0].shape[0]))
-    nz_cov=emj.misfit.nzcov
-    
-    data={'obs':y,'size':y.size,'cov':sps.diags(np.repeat(nz_cov.diagonal(),J), 0)}
-    
-    #prior_sam = lambda: emj.prior.sample('vec')
-    ########################### not sure cov part ######################################
-    eigv,_ = emj.prior.bsv.eigs()
-    pcv = np.repeat(eigv[:,np.newaxis,],J,axis=1).reshape(-1,order='F')
-    prior={'mean':emj.prior.mean,'cov':sps.diags(pcv),'sample':sampleu} 
-    
-    p=G(u0) # (J,m) where m is the data (observation) dimension
-    p_m=np.mean(p,axis=0,keepdims=True)
-    np.sqrt((y-p_m).dot(np.linalg.solve(data['cov'].toarray(),(y-p_m).T)))
-    
-    
-    # EnK parameters
-    nz_lvl=1.0
-    err_thld=1e-2
- 
-    # run EnK to generate ensembles
-    print("Preparing %s with step size %g for %s model..."
-          % (args.algs[args.algNO],args.step_sizes[args.algNO],args.mdls[args.mdlNO]))
-    enk = EnK(u0,G,data,prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,
-              alg=args.algs[args.algNO],adpt=True)
-    enk_fun=enk.run
-    enk_args=(args.max_iter,True)
-    savepath,filename=enk_fun(*enk_args)
-    '''
-    
-    
- 
-    
-   
     
  
 if __name__ == '__main__':

@@ -117,7 +117,7 @@ class EnK(object):
         return err,p
     
     # run EnK
-    def run(self,max_iter=100,SAVE=False,i=0):
+    def run(self,max_iter=100,SAVE=False):
         '''
         Run ensemble Kalman methods to collect ensembles estimates/samples
         '''
@@ -151,12 +151,12 @@ class EnK(object):
         
         return_list=u_est,errs,fwdouts,ensbls,n,t_used
         if SAVE:
-            return self.save(return_list,i)
+            return self.save(return_list)
         else:
             return return_list
     
     # save results to file
-    def save(self,dump_list,i=0):
+    def save(self,dump_list):
         #i: which time index
         import os,errno
         import pickle
@@ -172,7 +172,7 @@ class EnK(object):
                 raise
         # name file
         ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-        filename=self.alg+'_ensbl'+str(self.J)+'_dim'+str(self.D)+'_'+ctime+ '_'+str(i)
+        filename=self.alg+'_ensbl'+str(self.J)+'_dim'+str(self.D)+'_'+ctime
         # dump data
         f=open(os.path.join(savepath,filename+'.pckl'),'wb')
         pickle.dump(dump_list,f)

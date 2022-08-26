@@ -22,20 +22,17 @@ from optimizer.EnK import *
 np.set_printoptions(precision=3, suppress=True)
 import warnings
 warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
-# seed=2021
-# np.random.seed(seed)
 
-
-#Nicholas Haddad nehaddad@asu.edu ,Aariya Gage aariyagage@gmail.com
         
  
 def main(seed=2021):
+    #i: which time point do we want to work on (33, 0-32)
     
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
-    parser.add_argument('mdlNO', nargs='?', type=int, default=0)
+    parser.add_argument('timeNO', nargs='?', type=int, default=0)
     parser.add_argument('ensemble_size', nargs='?', type=int, default=100)
-    parser.add_argument('max_iter', nargs='?', type=int, default=2) #########################################50
+    parser.add_argument('max_iter', nargs='?', type=int, default=50) 
     parser.add_argument('step_sizes', nargs='?', type=float, default=[1.,.1])
     parser.add_argument('algs', nargs='?', type=str, default=('EKI','EKS'))
     parser.add_argument('mdls', nargs='?', type=str, default=('simple','STlik'))
@@ -90,8 +87,8 @@ def main(seed=2021):
         err_thld=1e-2
      
         # run EnK to generate ensembles
-        print("Preparing %s with step size %g for %s model..."
-              % (args.algs[args.algNO],args.step_sizes[args.algNO],args.mdls[args.mdlNO]))
+        print("Preparing %s with step size %g for time %d..."
+              % (args.algs[args.algNO],args.step_sizes[args.algNO],args.timeNO))
         enk = EnK(u0[:,:,i],G_,data,prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,
                   alg=args.algs[args.algNO],adpt=True)
         enk_fun=enk.run
@@ -100,18 +97,16 @@ def main(seed=2021):
         
         # append extra information including the count of solving
         filename_=os.path.join(savepath,filename+'.pckl')
-        filename=os.path.join(savepath,'Emoji_'+filename+'_Time'+str(i)+'.pckl') # change filename
+        filename=os.path.join(savepath,'Emoji_'+filename+'_time'+str(i)+'.pckl') # change filename
         os.rename(filename_, filename)
         f=open(filename,'ab')
         pickle.dump([ops_proj, obs_proj, i, args],f)
         f.close()
         
-        
+
+    #work for time point timeNO
     
-    
-    #work for time point 0
-    i=0
-    run_enk(i)
+    run_enk(args.timeNO)
     #error:ValueError: output array is read-only if Parallel
     #Parallel(n_jobs=n_jobs)(delayed(run_enk)(i) for i in range(J))
     
@@ -119,8 +114,9 @@ def main(seed=2021):
  
 if __name__ == '__main__':
     
-    np.random.seed(2022)
-    main()
+    seed = 2022
+    np.random.seed(seed)
+    main(seed)
     
     
    

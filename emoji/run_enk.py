@@ -106,7 +106,16 @@ def main(seed=2021):
         enk_fun=enk.run
         enk_args=(args.max_iter,True,i)
         savepath,filename=enk_fun(*enk_args)
-        return savepath,filename
+        '''
+        # append extra information including the count of solving
+        filename_=os.path.join(savepath,filename+'.pckl')
+        filename=os.path.join(savepath,'Lorenz_'+{True:'avg',False:'full','aug':'avgaug'}[lrz.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
+        os.rename(filename_, filename)
+        f=open(filename,'ab')
+        pickle.dump([obs_times,avg_traj,STlik,var_out,y,args],f)
+        f.close()
+        '''
+        
     
     
     #work for time point 0
@@ -171,13 +180,7 @@ def main(seed=2021):
     
     
  
-    # append extra information including the count of solving
-    filename_=os.path.join(savepath,filename+'.pckl')
-    filename=os.path.join(savepath,'Lorenz_'+{True:'avg',False:'full','aug':'avgaug'}[lrz.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
-    os.rename(filename_, filename)
-    f=open(filename,'ab')
-    pickle.dump([obs_times,avg_traj,STlik,var_out,y,args],f)
-    f.close()
+    
    
     
  

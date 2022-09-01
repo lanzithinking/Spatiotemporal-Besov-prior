@@ -104,7 +104,8 @@ class EnK(object):
             # t1=time.time()
             # print('Time used is %.4f' % (t1-t0))
             # t0=time.time()
-            err_alpha=np.stack([SMW_act(alpha*self.misfit.nzcov, sps.eye(self.J), p_tld[:,:,t].T/np.sqrt(self.J), solver)((y_eta-p_m)[:,t]) for t in range(n_T)]).T
+            # err_alpha=np.stack([SMW_act(alpha*self.misfit.nzcov, sps.eye(self.J), p_tld[:,:,t].T/np.sqrt(self.J), solver)((y_eta-p_m)[:,t]) for t in range(n_T)]).T
+            err_alpha=SMW_act(alpha*sps.block_diag((self.misfit.nzcov,)*int(self.misfit.sz_t)), sps.eye(self.J), p_tld.T/np.sqrt(self.J), solver)(y_eta-p_m).T
             # t1=time.time()
             # print('Time used is %.4f' % (t1-t0))
             # print('Difference: %.6f' % (abs(err_alpha-err_alpha0).max()))

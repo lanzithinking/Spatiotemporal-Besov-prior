@@ -74,7 +74,7 @@ class EnK(object):
         # prediction step
         p=self.G(self.u) # (J,m,T) where (m,T) is the data (observation) dimension
         p_m=np.mean(p,axis=0)
-        n_T=p.shape[-1]
+        # n_T=p.shape[-1]
         
         # discrepancy principle
         eta=self.misfit.noise()*np.sqrt(self.r) if self.alg=='EKI' and self.r>0 else 0

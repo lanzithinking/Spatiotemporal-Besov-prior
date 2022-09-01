@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -20,7 +20,7 @@ import scipy.sparse as sps
 import os,sys
 sys.path.append( "../" )
 from util.stbp.BSV import BSV
-from util.stbp.EPP import EPP
+from util.stbp.qEP import qEP
 from util.stbp.STBP import STBP
 
 # set to warn only once for the same warnings
@@ -40,9 +40,9 @@ class prior(STBP):
         bsv=BSV(x=np.stack([xx.flatten(),yy.flatten()]).T,store_eig=store_eig,**kwargs.pop('spat_args',{}))
         self.sz_t=sz_t # J = sz_t
         t=np.linspace(0,1,self.sz_t)
-        epp=EPP(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{}))
+        qep=qEP(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{}))
         self.space=kwargs.pop('space','vec') # alternative 'fun'
-        super().__init__(spat=bsv, temp=epp, store_eig=store_eig, **kwargs) # N = I*J
+        super().__init__(spat=bsv, temp=qep, store_eig=store_eig, **kwargs) # N = I*J
         self.mean=mean
     
     def cost(self,u):
@@ -58,7 +58,7 @@ class prior(STBP):
         
         proj_u=self.C_act(u, -1.0/self.bsv.q) # (LJ,)
         proj_u=proj_u.reshape((self.J,-1))
-        val=0.5*np.sum(self.epp.logpdf(proj_u,out='norms')**(self.bsv.q/self.epp.q))
+        val=0.5*np.sum(self.qep.logpdf(proj_u,out='norms')**(self.bsv.q/self.qep.q))
         return val
     
     # def grad(self,u):
@@ -75,8 +75,8 @@ class prior(STBP):
     #     eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
     #     gamma=eigv**(1/self.bsv.q)
     #     proj_u=((u if self.space=='vec' else eigf.T.dot(u) if self.space=='fun' else ValueError('Wrong space!'))/gamma).reshape((self.J,-1)) # (J,L)
-    #     epp_norm=self.epp.logpdf(proj_u,out='norms')**(1/self.epp.q) # (L,)
-    #     g=0.5*self.bsv.q*(epp_norm**(self.bsv.q-2) *self.epp.solve(proj_u)).reshape((self.L*self.J,-1))/gamma[:,None] # (LJ,)
+    #     qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
+    #     g=0.5*self.bsv.q*(qep_norm**(self.bsv.q-2) *self.qep.solve(proj_u)).reshape((self.L*self.J,-1))/gamma[:,None] # (LJ,)
     #     if self.space=='fun': g=eigf.dot(g) # (N,)
     #     return g.squeeze()
     
@@ -94,8 +94,8 @@ class prior(STBP):
         eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
         gamma=eigv**(1/self.bsv.q)
         proj_u=((u.reshape((self.L,self.J,-1),order='F') if self.space=='vec' else eigf.T.dot(u.reshape((self.J,self.I,-1))) if self.space=='fun' else ValueError('Wrong space!'))/gamma[:,None,None]).swapaxes(0,1).reshape((self.J,-1),order='F') # (J,L)
-        epp_norm=self.epp.logpdf(proj_u,out='norms')**(1/self.epp.q) # (L,)
-        g=0.5*self.bsv.q*(epp_norm**(self.bsv.q-2) *self.epp.solve(proj_u)/gamma).swapaxes(0,1) # (L,J)
+        qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
+        g=0.5*self.bsv.q*(qep_norm**(self.bsv.q-2) *self.qep.solve(proj_u)/gamma).swapaxes(0,1) # (L,J)
         if self.space=='fun': g=eigf.dot(g) # (I,J)
         g=g.reshape((u_sz,-1),order='F')
         return g.squeeze()
@@ -103,7 +103,7 @@ class prior(STBP):
     def sample(self, output_space=None, mean=None):
         """
         Sample a random function u ~ STBP(0,_C)
-        vector u ~ STBP(0,C,q): u = gamma xi phi, xi ~ EPP(0,C,q)
+        vector u ~ STBP(0,C,q): u = gamma xi phi, xi ~ qEP(0,C)
         """
         if output_space is None:
             output_space=self.space
@@ -111,8 +111,8 @@ class prior(STBP):
             mean=self.mean
         
         if output_space=='vec':
-            epp_rv=self.epp.rnd(n=self.L)*self.gamma[None,:] # (J,L)
-            u=epp_rv.flatten() # (LJ,)
+            qep_rv=self.qep.rnd(n=self.L)*self.gamma[None,:] # (J,L)
+            u=qep_rv.flatten() # (LJ,)
         elif output_space=='fun':
             u=super().rnd(n=1).squeeze() # (N,)
         else:
@@ -217,7 +217,7 @@ if __name__ == '__main__':
     u=u.reshape((-1,prior.sz_t),order='F')
     fig, axes=plt.subplots(nrows=1,ncols=4,sharex=True,sharey=True,figsize=(15,4))
     n_j=int(np.floor(sz_t/4))
-    for j,t_j in enumerate(prior.epp.x[::n_j,0]):
+    for j,t_j in enumerate(prior.qep.x[::n_j,0]):
         ax=axes.flat[j]
         ax.imshow(u[:,j*n_j].reshape(prior.sz_x),origin='lower',extent=[0,1,0,1])
         ax.set_title('t = %.2f'% (t_j,))

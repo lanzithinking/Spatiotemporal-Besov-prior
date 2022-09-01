@@ -157,7 +157,6 @@ class EnK(object):
     
     # save results to file
     def save(self,dump_list):
-        #i: which time index
         import os,errno
         import pickle
         # create folder

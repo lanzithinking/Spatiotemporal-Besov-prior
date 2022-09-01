@@ -8,7 +8,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -109,35 +109,60 @@ class misfit(object):
             print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
         return obs, nzcov, sz_x, sz_t
     
-    def cost(self, u):
+    def cost(self, u=None, obs=None):
         """
         Evaluate misfit function for given images (vector) u.
         """
-        if u.shape[0]!=np.prod(self.sz_x):
-            u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
-        
         ops_proj, obs_proj = self.obs
-        val = 0
-        for i in range(self.sz_t):
-            dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
-            # val += 0.5*np.sum(dif_obs*spla.solve(self.nzcov,dif_obs,sym_pos=True))
-            val += 0.5*np.sum(dif_obs*spsla.spsolve(self.nzcov,dif_obs))
+        if obs is None:
+            if u.shape[0]!=np.prod(self.sz_x):
+                u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+            obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
+        # val = 0
+        # for i in range(self.sz_t):
+        #     dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
+        #     # val += 0.5*np.sum(dif_obs*spla.solve(self.nzcov,dif_obs,sym_pos=True))
+        #     val += 0.5*np.sum(dif_obs*spsla.spsolve(self.nzcov,dif_obs))
+        dif_obs = obs - np.stack(obs_proj).T
+        val = .5*np.sum(dif_obs*spsla.spsolve(self.nzcov,dif_obs))
         return val
     
-    def grad(self, u):
+    def grad(self, u=None, obs=None):
         """
         Compute the gradient of misfit
         """
-        if u.shape[0]!=np.prod(self.sz_x):
-            u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
-        
         ops_proj, obs_proj = self.obs
+        if obs is None:
+            if u.shape[0]!=np.prod(self.sz_x):
+                u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+            obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
+        
+        dif_obs = obs - np.stack(obs_proj).T
         g = []
         for i in range(self.sz_t):
-            dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
+            # dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
             # g.append( ops_proj[i].T.dot(spla.solve(self.nzcov,dif_obs,sym_pos=True)) )
-            g.append( ops_proj[i].T.dot(spsla.spsolve(self.nzcov,dif_obs)) )
+            g.append( ops_proj[i].T.dot(spsla.spsolve(self.nzcov,dif_obs[:,i])) )
         return np.stack(g).T # (I,J)
+    
+    # @staticmethod
+    # def is_diag(a):
+    #     diag_elem = a.diagonal().copy()
+    #     np.fill_diagonal(a,0)
+    #     out = (a==0).all()
+    #     np.fill_diagonal(a,diag_elem)
+    #     return out
+    
+    def noise(self):
+        """
+        Generate Gaussian random noise with data covariance
+        """
+        z = np.random.randn(self.nzcov.shape[0],self.sz_t)
+        if np.all(self.nzcov==np.diag(self.nzcov.diagonal())): #is_diag(self.nzcov):
+            nzrv = np.sqrt(self.nzcov.diagonal())[:,None]*z
+        else:
+            nzrv = spla.cholesky(self.nzcov, lower=True).dot(z)
+        return nzrv
     
     def _anisoTV(self, sz_x=None, sz_t=None):
         """

@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.7"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -28,7 +28,7 @@ from scipy.stats import gennorm
 import sys
 sys.path.append( "../../" )
 from util.stbp.BSV import *
-from util.stbp.EPP import *
+from util.stbp.qEP import *
 from util.stbp.linalg import *
 
 # set to warn only once for the same warnings
@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 class STBP(BSV):
     def __init__(self,spat,temp,store_eig=False,**kwargs):
         """
-        Initialize the STBP class with spatial (BSV) class bsv, temporal (EPP) class epp and the dynamic eigenvalues Lambda
+        Initialize the STBP class with spatial (BSV) class bsv, temporal (qEP) class qep and the dynamic eigenvalues Lambda
         spat: spatial class (discrete size I x L)
         temp: temporal class (discrete size J x L)
         gamma: decaying eigenvalues
@@ -47,21 +47,21 @@ class STBP(BSV):
         spdapx: use speed-up or approximation
         -----------------------------------------------
         u(x,t) = sum_{l=1}^infty lambda_l(t) * phi_l(x)
-        lambda_l = gamma_l xi_l(t) ~ EPP(0,cov_l,q), xi_l ~ EPP(0, C, q)
+        lambda_l = gamma_l xi_l(t) ~ qEP(0,cov_l), xi_l ~ qEP(0, C)
         phi_l - basis of Besov prior
         """
         if type(spat) is BSV:
             self.bsv=spat # spatial class
         else:
             self.bsv=BSV(spat,store_eig=store_eig,**kwargs.pop('spat_args',{}))
-        if type(temp) is EPP:
-            self.epp=temp # temporal class
+        if type(temp) is qEP:
+            self.qep=temp # temporal class
         else:
-            self.epp=EPP(temp,store_eig=store_eig or Lambda is None,**kwargs.pop('temp_args',{}))
+            self.qep=qEP(temp,store_eig=store_eig or Lambda is None,**kwargs.pop('temp_args',{}))
         self.parameters=kwargs # all parameters of the kernel
-        self.I,self.J=self.bsv.N,self.epp.N # spatial and temporal dimensions
+        self.I,self.J=self.bsv.N,self.qep.N # spatial and temporal dimensions
         self.N=self.I*self.J # joint dimension (number of total inputs per trial)
-        self.L=self.bsv.L#*self.epp.L
+        self.L=self.bsv.L#*self.qep.L
         if self.L>self.I:
             warnings.warn("Karhunen-Loeve truncation number cannot exceed the size of spatial basis!")
             self.L=self.I
@@ -73,7 +73,7 @@ class STBP(BSV):
             self.comm=None
         self.spdapx=self.parameters.get('spdapx',self.N>1e3)
         # self.store_eig=store_eig
-        self.store_eig=False # Use BSV and EPP eigen-decomposition, not its own!
+        self.store_eig=False # Use BSV and qEP eigen-decomposition, not its own!
         if self.store_eig:
             # obtain partial eigen-basis
             self.eigv,self.eigf=self.eigs(**kwargs)
@@ -97,7 +97,7 @@ class STBP(BSV):
     #     Get kernel as matrix
     #     """
     #     alpha=kwargs.get('alpha',1)
-    #     C = np.kron(self.epp.tomat(alpha=alpha),self.bsv.tomat(alpha=alpha)) # (IJ,IJ)
+    #     C = np.kron(self.qep.tomat(alpha=alpha),self.bsv.tomat(alpha=alpha)) # (IJ,IJ)
     #     # if self.spdapx and not sps.issparse(C):
     #     #     warnings.warn('Possible memory overflow!')
     #     return C
@@ -166,7 +166,7 @@ class STBP(BSV):
     #         if v.shape[0]!=self.I:
     #             v=v.reshape((self.I,self.J,-1),order='F')
     #         if np.ndim(v)<3: v=v[:,:,None]
-    #         Cv=self.epp.act(self.bsv.mult(v,alpha=alpha),alpha=alpha,transp=True).reshape((self.N,-1),order='F') # (IJ,K_)
+    #         Cv=self.qep.act(self.bsv.mult(v,alpha=alpha),alpha=alpha,transp=True).reshape((self.N,-1),order='F') # (IJ,K_)
     #     return Cv
     
     def solve(self,v,**kwargs):
@@ -205,9 +205,9 @@ class STBP(BSV):
     #         L=self.L;
     #     if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
     #         L=min(L,self.N)
-    #         lambda_t,Phi_t=self.epp.eigs(); lambda_x,Phi_x=self.bsv.eigs()
+    #         lambda_t,Phi_t=self.qep.eigs(); lambda_x,Phi_x=self.bsv.eigs()
     #         eigv=np.kron(lambda_t,lambda_x); eigf=np.kron(Phi_t,Phi_x) # (IJ,L)
-    #         if L<=self.bsv.L*self.epp.L:
+    #         if L<=self.bsv.L*self.qep.L:
     #             eigv=eigv[:L]; eigf=eigf[:,:L]
     #         else:
     #             warnings.warn('Requested too many eigenvalues!')
@@ -235,26 +235,26 @@ class STBP(BSV):
         Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
         """
         if not self.spdapx:
-            logpdf,q_ldet=BSV.logpdf(self,self.epp.act(X.reshape((self.J,self.I,-1)).reshape((self.N,-1)),alpha=-.5))
+            logpdf,q_ldet=BSV.logpdf(self,self.qep.act(X.reshape((self.J,self.I,-1)).reshape((self.N,-1)),alpha=-.5))
         else:
             eigv,eigf=self.bsv.eigs();
             abs_eigv=abs(eigv)
             q_ldet=-X.shape[1]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J
             proj_X=eigf.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
             proj_X=proj_X.reshape((self.J,-1))
-            epp_norm=self.epp.logpdf(proj_X,out='norms')
-            qsum=-0.5*np.sum(epp_norm**(self.bsv.q/self.epp.q))
+            qep_norm=self.qep.logpdf(proj_X,out='norms')
+            qsum=-0.5*np.sum(qep_norm**(self.bsv.q/self.qep.q))
             logpdf=q_ldet+qsum
         return logpdf,q_ldet
     
-    def update(self,bsv=None,epp=None):
+    def update(self,bsv=None,qep=None):
         """
         Update the eigen-basis
         """
         if bsv is not None:
             self.bsv=bsv; self.I=self.bsv.N; self.N=self.I*self.J
-        if epp is not None:
-            self.epp=C_t; self.J=self.epp.N; self.N=self.I*self.J
+        if qep is not None:
+            self.qep=qep; self.J=self.qep.N; self.N=self.I*self.J
         if self.store_eig:
             self.eigv,self.eigf=self.eigs(upd=True)
         return self
@@ -263,9 +263,9 @@ class STBP(BSV):
         """
         Generate spatiotemporal Besov random function (vector) rv ~ STBP(0,C,q)
         """
-        epp_rv=self.epp.rnd(n=self.L*n).reshape((-1,self.L,n),order='F')*self.gamma[None,:,None] # (J,L,n)
+        qep_rv=self.qep.rnd(n=self.L*n).reshape((-1,self.L,n),order='F')*self.gamma[None,:,None] # (J,L,n)
         _,Phi_x=self.bsv.eigs();
-        rv=Phi_x.dot(epp_rv).reshape((-1,n),order='F') # (N,n)
+        rv=Phi_x.dot(qep_rv).reshape((-1,n),order='F') # (N,n)
         return rv
 
 if __name__=='__main__':
@@ -284,9 +284,9 @@ if __name__=='__main__':
     ## temporal class
     t=np.linspace(0,1,10)[:,np.newaxis]
     # x=np.random.rand(100,1) 
-    epp=EPP(t,L=10,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=2)
+    qep=qEP(t,L=10,store_eig=True,ker_opt='matern',l=.1,nu=1.5,q=2)
     ## spatiotemporal class
-    stbp=STBP(bsv,epp,store_eig=True)
+    stbp=STBP(bsv,qep,store_eig=True)
     verbose=stbp.comm.rank==0 if stbp.comm is not None else True
     # if verbose:
     #     print('Eigenvalues :', np.round(stbp.eigv[:min(10,stbp.L)],4))
@@ -327,10 +327,10 @@ if __name__=='__main__':
     stbp.bsv.q=2
     u=stbp.rnd()
     v=stbp.rnd()
-    h=1e-6
+    h=1e-7
     dlogpdfv_fd=(stbp.logpdf(u+h*v)[0]-stbp.logpdf(u)[0])/h
     dlogpdfv=-stbp.solve(u).T.dot(v)
-    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v) # this in general is not small because of C_t; try small correlation length in EPP, e.g. l=0.001 
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v) # this in general is not small because of C_t; try small correlation length in qEP, e.g. l=0.001 
     if verbose:
         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
     if verbose:

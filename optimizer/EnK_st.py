@@ -105,11 +105,11 @@ class EnK(object):
             # print('Time used is %.4f' % (t1-t0))
             # t0=time.time()
             # err_alpha=np.stack([SMW_act(alpha*self.misfit.nzcov, sps.eye(self.J), p_tld[:,:,t].T/np.sqrt(self.J), solver)((y_eta-p_m)[:,t]) for t in range(n_T)]).T
-            err_alpha=SMW_act(alpha*sps.block_diag((self.misfit.nzcov,)*int(self.misfit.sz_t)), sps.eye(self.J), p_tld.T/np.sqrt(self.J), solver)(y_eta-p_m).T
+            err_alpha=SMW_act(alpha*sps.block_diag((self.misfit.nzcov,)*int(self.misfit.sz_t)), sps.eye(self.J), p_tld.T/np.sqrt(self.J), solver)((y_eta-p_m).flatten(order='F')).reshape((-1,self.misfit.sz_t),order='F')
             # t1=time.time()
             # print('Time used is %.4f' % (t1-t0))
             # print('Difference: %.6f' % (abs(err_alpha-err_alpha0).max()))
-            if alpha*np.sqrt(self.misfit.cost(obs=self.misfit.data+err_alpha))>=self.rho*err: break
+            if alpha*np.sqrt(np.sum(err_alpha*self.misfit.nzcov.dot(err_alpha)))>=self.rho*err: break
             err_alpha=None
         
         # t0=time.time()
@@ -132,7 +132,6 @@ class EnK(object):
             # if self.adpt: alpha/=np.sqrt(np.sum([d[t]*C_pp[t].dot(d[t]) for t in range(n_T)])*(self.J-1))*alpha+self.eps
             if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp_act(d))*(self.J-1))*alpha+self.eps
             # C_pp=None
-            u_tld=self.u-np.mean(self.u,axis=0)
             if self.D<=2*self.J:
                 # C_uu=np.cov(self.u,rowvar=False)
                 # self.u=self.prior.cov.dot(np.linalg.solve(self.prior.cov+alpha*C_uu,self.u.T+np.sum([C_up[t].dot(d[t]) for t in range(n_T)],axis=0))).T
@@ -143,11 +142,12 @@ class EnK(object):
                 # use Sherman–Morrison-Woodbury formula for D>>J
                 # self.u=self.u.T+np.sum([C_up[t].dot(d[t]) for t in range(n_T)],axis=0)
                 # self.u=self.u.T+np.sum(C_up_act(d),axis=0)
-                self.u=self.u.T+C_up_act(d)
+                # self.u=self.u.T+C_up_act(d)
+                u_tld=self.u-np.mean(self.u,axis=0)
                 solver=sps.linalg.spsolve if sps.issparse(self.prior.cov) else np.linalg.solve
                 # self.u-=u_tld.T.dot(np.linalg.solve(self.J/alpha*np.eye(self.J)+u_tld.dot(solver(self.prior.cov,u_tld.T)), u_tld.dot(solver(self.prior.cov,self.u))))
-                self.u=self.prior.cov.dot(SMW_act(self.prior.cov, sps.eye(self.J)/alpha, u_tld.T/np.sqrt(self.J), solver)(self.u))
-                self.u=self.u.T
+                # self.u=self.u.T
+                self.u=self.prior.cov.dot(SMW_act(self.prior.cov, sps.eye(self.J)/alpha, u_tld.T/np.sqrt(self.J), solver)(self.u.T+C_up_act(d))).T
             self.u+=np.random.randn(self.J,self.J).dot(u_tld)*np.sqrt(2*alpha/self.J)
         
         return err,p

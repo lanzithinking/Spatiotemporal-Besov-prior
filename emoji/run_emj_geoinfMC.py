@@ -13,7 +13,7 @@ from emoji import emoji
 # MCMC
 import sys
 sys.path.append( "../" )
-from sampler.geoinfMC import geoinfMC
+from sampler.w_geoinfMC import geoinfMC
 
 np.set_printoptions(precision=3, suppress=True)
 seed=2022

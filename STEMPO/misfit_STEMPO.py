@@ -62,17 +62,21 @@ class misfit_STEMPO(object):
 #             print("Stempo data downloaded.")
         truth = spio.loadmat('stempo_ground_truth_2d_b4.mat')
         image = truth['obj']
-        nx, ny, nt = 560, 560, 10;
+        nx, ny, nt = 560, 560, 20;
+        anglecount = 10
+        rowshift = 5
+        columnsshift = 14
+        nt = 20
         angleVector = list(range(nt))
         for t in range(nt):
-            angleVector[t] = np.linspace(t, 360 - 4*nt + 4*t, num = nt, endpoint = True)
+            angleVector[t] = np.linspace(rowshift*t, 14*anglecount+ rowshift*t, num = anglecount+1)
         angleVectorRad = np.deg2rad(angleVector)
                 # Generate matrix versions of the operators and a large bidiagonal sparse matrix
         N = nx         # object size N-by-N pixels
         p = int(np.sqrt(2)*N)    # number of detector pixels
         # view angles
         theta = angleVectorRad#[0]#np.linspace(0, 2*np.pi, q, endpoint=False)   # in rad
-        q = theta.shape[0]          # number of projection angles
+        q = theta.shape[1]          # number of projection angles
         source_origin = 3*N                     # source origin distance [cm]
         detector_origin = N                       # origin detector distance [cm]
         detector_pixel_size = (source_origin + detector_origin)/source_origin
@@ -84,13 +88,14 @@ class misfit_STEMPO(object):
         savedelta = np.zeros((nt, 1))
         savex_true = np.zeros((nx*ny, nt))
         B = list(range(nt))
+        count = np.int_(360/nt)
         for i in range(nt):
             proj_geom = astra.create_proj_geom('fanflat', detector_pixel_size, p, theta[i], source_origin, detector_origin)
             vol_geom = astra.create_vol_geom(N, N)
             proj_id = astra.create_projector('line_fanflat', proj_geom, vol_geom)
             mat_id = astra.projector.matrix(proj_id)
             A_n = astra.matrix.get(mat_id)
-            x_true = image[:, :, i]
+            x_true = image[:, :, count*i]
             x_truef_sino = x_true.flatten(order='F') 
             savex_true[:, i] = x_truef_sino
             sn = A_n*x_truef_sino

@@ -135,7 +135,7 @@ class STEMPO:
         # solve for MAP
         start = time.time()
         # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-        res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':3,'disp':True})
+        res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':2,'disp':True})
         # res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':500,'disp':True})
         # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
         end = time.time()
@@ -231,6 +231,6 @@ if __name__ == '__main__':
     # plot MAP
     map_f = stmpo.prior.vec2fun(map_v).reshape(np.append(stmpo.misfit.sz_x,stmpo.misfit.sz_t),order='F').swapaxes(0,1)
     stmpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')
-    xx = map_f.reshape((560, 560, 10))
+    xx = map_f.reshape((stmpo.misfit.sz_x[0], stmpo.misfit.sz_x[1], stmpo.misfit.sz_t))
     plt.imshow(xx[:, :, 3])
     plt.imshow(xx[:, :, 9])

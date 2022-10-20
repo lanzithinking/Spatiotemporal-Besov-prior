@@ -1,6 +1,9 @@
 import numpy as np
 import scipy as sp
 import scipy.io as spio
+import h5py
+import numpy as np
+from scipy.sparse import csc_matrix
 from scipy.fftpack import dct, idct
 import matplotlib
 import matplotlib.pyplot as plt
@@ -10,24 +13,24 @@ import requests
 import scipy as sp
 from scipy import sparse
 import numpy as np
+import h5py
 import os, sys
-sys.path.insert(0,'/Users/mirjetapasha/Documents/Research_Projects/BesovPrior_September_9/Spatiotemporal-Besov-prior/STEMPO/')
+sys.path.insert(0,'/Users/mirjetapasha/Documents/Research_Projects/BesovPrior_September_9_keep/Spatiotemporal-Besov-prior/')
 from os.path import exists
 import scipy.sparse as sps
 # import scipy.linalg as spla
 import scipy.io as spio
 import numpy as np
-import h5py
 import os, sys
 from os.path import exists
 import scipy.sparse as sps
 import pylops
-from gks_l import *
 # functions to generate emoji data are stored in io_l.py
 from io11 import *
 from operators_l import *
 from hlp117 import *
 from scipy.sparse import coo_matrix, block_diag
+from gks_l import *
 # from scipy.linalg import block_diag
 # self defined modules
 # from gks_tools import *
@@ -52,72 +55,48 @@ class misfit_STEMPO(object):
         """
         Generate stempo observations
         """
-#         if not os.path.exists('./stempo'): os.makedirs('./stempo')
-#         if not os.path.exists('./stempo/stempo_ground_truth_2d_b4.mat'):
-#             import requests
-#             print("downloading...")
-#             r = requests.get('https://zenodo.org/record/7147139#.Y0Bba-zMLeo/stempo_ground_truth_2d_b4.mat')
-#             with open('.stempo/stempo_ground_truth_2d_b4.mat', "wb") as file:
-#                 file.write(r.content)
-#             print("Stempo data downloaded.")
-        truth = spio.loadmat('stempo_ground_truth_2d_b4.mat')
-        image = truth['obj']
-        nx, ny, nt = 560, 560, 20;
-        anglecount = 10
-        rowshift = 5
-        columnsshift = 14
-        nt = 20
-        angleVector = list(range(nt))
-        for t in range(nt):
-            angleVector[t] = np.linspace(rowshift*t, 14*anglecount+ rowshift*t, num = anglecount+1)
-        angleVectorRad = np.deg2rad(angleVector)
-                # Generate matrix versions of the operators and a large bidiagonal sparse matrix
-        N = nx         # object size N-by-N pixels
-        p = int(np.sqrt(2)*N)    # number of detector pixels
-        # view angles
-        theta = angleVectorRad#[0]#np.linspace(0, 2*np.pi, q, endpoint=False)   # in rad
-        q = theta.shape[1]          # number of projection angles
-        source_origin = 3*N                     # source origin distance [cm]
-        detector_origin = N                       # origin detector distance [cm]
-        detector_pixel_size = (source_origin + detector_origin)/source_origin
-        detector_length = detector_pixel_size*p 
+        nx, ny, nt =  140, 140, 8
+        N = 140
+        N_det = 140
+        N_theta = 45
+        theta = np.linspace(0,360,N_theta,endpoint=False)
+        # Load measurement data as sinogram
+        data = spio.loadmat('/STEMPO_realdata/stempo_seq8x45_2d_b16.mat') # !!! Change the file path to suit yourself !!!
+        CtData = data["CtData"]
+        m = CtData["sinogram"][0][0]
+        # Load parameters
+        param = CtData["parameters"]
+        f = h5py.File('A_seqData.mat')
+        fA = f["A"]
+        # Extract information
+        Adata = np.array(fA["data"])
+        Arowind = np.array(fA["ir"])
+        Acolind = np.array(fA["jc"])
+        # Need to know matrix size (shape) somehow
+        n_rows = N_det*N_theta
+        n_cols = N*N
+        Aloaded = csc_matrix((Adata, Arowind, Acolind), shape=(n_rows, n_cols))
         saveA = list(range(nt))
-        saveb = np.zeros((p*q, nt))
-        saveb_true = np.zeros((p*q, nt))
-        savee = np.zeros((p*q, nt))
+        saveb = np.zeros((6300, nt))
+        savee = np.zeros((6300, nt))
         savedelta = np.zeros((nt, 1))
-        savex_true = np.zeros((nx*ny, nt))
         B = list(range(nt))
-        count = np.int_(360/nt)
         for i in range(nt):
-            proj_geom = astra.create_proj_geom('fanflat', detector_pixel_size, p, theta[i], source_origin, detector_origin)
-            vol_geom = astra.create_vol_geom(N, N)
-            proj_id = astra.create_projector('line_fanflat', proj_geom, vol_geom)
-            mat_id = astra.projector.matrix(proj_id)
-            A_n = astra.matrix.get(mat_id)
-            x_true = image[:, :, count*i]
-            x_truef_sino = x_true.flatten(order='F') 
-            savex_true[:, i] = x_truef_sino
-            sn = A_n*x_truef_sino
-            b_i = sn.flatten(order='F') 
+            tmp = m[45*(i):45*(i+1), :]
+            b_i = tmp.flatten()
             sigma = 0.01 # noise level
             e = np.random.normal(0, 1, b_i.shape[0])
             e = e/np.linalg.norm(e)*np.linalg.norm(b_i)*sigma
             delta = np.linalg.norm(e)
             b_m = b_i + e
-            saveA[i] = A_n
+            saveA[i] = Aloaded
             B[i] = b_m
-            saveb_true[:, i] = sn
             saveb[:, i] = b_m
             savee[:, i] = e
             savedelta[i] = delta
-            astra.projector.delete(proj_id)
-            astra.matrix.delete(mat_id)
         A = block_diag((saveA))    
         b = saveb.flatten(order ='F') 
-        xf = savex_true.flatten(order = 'F')
         return A, b, saveA, B, nx, ny, nt, savedelta, saveb
-    
     def observe(self):
         """
         Observe image projections
@@ -128,9 +107,7 @@ class misfit_STEMPO(object):
         sz_x = (nx,ny) # I = np.prod(sz_x) = nx*ny
         sz_t = nt # J = sz_t
         ops_proj = AA; obs_proj = B
-        # nzcov = np.cov(np.stack(obs_proj), rowvar=True)
-        tmp = ops_proj[0].shape[0]
-        nzcov = np.identity(tmp)
+        nzcov = np.cov(np.stack(obs_proj), rowvar=True)
         return (ops_proj,obs_proj), nzcov, sz_x, sz_t
     
     def get_obs(self, **kwargs):
@@ -152,7 +129,6 @@ class misfit_STEMPO(object):
             print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
     
         return obs, nzcov, sz_x, sz_t
-    
     def cost(self, u=None, obs=None):
         """
         Evaluate misfit function for given images (vector) u.
@@ -175,24 +151,24 @@ class misfit_STEMPO(object):
         return val
     
     def grad(self, u=None, obs=None):
-        """
-        Compute the gradient of misfit
-        """
-        ops_proj, obs_proj = self.obs
-        if obs is None:
-            if u.shape[0]!=np.prod(self.sz_x):
-                u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
-            obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
-        
-        dif_obs = obs - np.stack(obs_proj).T
-        g = []
-        a = np.stack(dif_obs).shape[0]
-        nzcov = np.identity(a)
-        for i in range(self.sz_t):
-            # dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
-            # g.append( ops_proj[i].T.dot(spla.solve(self.nzcov,dif_obs,sym_pos=True)) )
-            g.append( ops_proj[i].T.dot(spsla.spsolve(nzcov,dif_obs[:,i])) )
-        return np.stack(g).T # (I,J)
+            """
+            Compute the gradient of misfit
+            """
+            ops_proj, obs_proj = self.obs
+            if obs is None:
+                if u.shape[0]!=np.prod(self.sz_x):
+                    u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+                obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
+            
+            dif_obs = obs - np.stack(obs_proj).T
+            g = []
+            a = np.stack(dif_obs).shape[0]
+            nzcov = np.identity(a)
+            for i in range(self.sz_t):
+                # dif_obs = ops_proj[i].dot(u[:,i]) - obs_proj[i]
+                # g.append( ops_proj[i].T.dot(spla.solve(self.nzcov,dif_obs,sym_pos=True)) )
+                g.append( ops_proj[i].T.dot(spsla.spsolve(nzcov,dif_obs[:,i])) )
+            return np.stack(g).T # (I,J)
     
     def _anisoTV(self, sz_x=None, sz_t=None):
         """
@@ -244,18 +220,3 @@ class misfit_STEMPO(object):
             if save_imgs:  plt.savefig(save_path+'/stempo_'+str(i).zfill(len(str(rcstr_imgs.shape[2])))+'.png',bbox_inches='tight')
             plt.pause(.1)
             plt.draw()
-
-if __name__ == '__main__':
-    np.random.seed(2022)
-    import time
-    from prior import *
-    
-    # define the misfit
-    msft = misfit_STEMPO()
-    # define the prior
-     
-    # pri = prior(sz_x=msft.sz_x,sz_t=msft.sz_t)
-    A, b, saveA, B, nx, ny, nt, savedelta, saveB = msft._gen_stempo()
-    u = np.random.rand(np.prod(msft.sz_x),msft.sz_t)
-    cst = msft.cost(u)
-    grd = msft.grad(u)

@@ -2,7 +2,6 @@
 Functions which implement operators for measurement or regularization.
 """
 
-from venv import create
 import numpy as np
 import pylops
 from scipy.ndimage import convolve

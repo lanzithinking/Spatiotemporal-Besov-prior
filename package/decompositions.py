@@ -2,12 +2,7 @@
 Functions which implement Krylov decompositions.
 """
 
-from random import betavariate
-from re import X
-import numpy as np 
-import matplotlib.pyplot as plt
-from scipy.optimize import newton
-
+import numpy as np
 from tqdm import tqdm
 
 

@@ -226,20 +226,20 @@ if __name__ == '__main__':
     spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    emj = crossPhantom(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
+    xph = crossPhantom(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
     # # test
-    # emj.test(1e-8)
+    # xph.test(1e-8)
     # obtain MAP
-    map_v = emj.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
+    map_v = xph.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     # #  compare it with the truth
-    # true_param = emj.misfit.truth # no truth
-    # map_f = emj.prior.vec2fun(map_v).reshape(true_param.shape)
+    # true_param = xph.misfit.truth # no truth
+    # map_f = xph.prior.vec2fun(map_v).reshape(true_param.shape)
     # relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
     # print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
     # # report the minimum cost
-    # # min_cost = emj._get_misfit(map_v)
+    # # min_cost = xph._get_misfit(map_v)
     # # print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = emj.prior.vec2fun(map_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')
+    map_f = xph.prior.vec2fun(map_v).reshape(np.append(xph.misfit.sz_x,xph.misfit.sz_t),order='F').swapaxes(0,1)
+    xph.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')

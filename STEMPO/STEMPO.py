@@ -1,13 +1,26 @@
+#!/usr/bin/env python
+"""
+Class definition of the dynamic linear inverse problem of STEMPO.
+Shiwei Lan @ ASU 2022
+--------------------------------------------------------------------------
+Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
+"""
+__author__ = "Mirjeta Pasha"
+__copyright__ = "Copyright 2022, The STBP project"
+__license__ = "GPL"
+__version__ = "0.1"
+__maintainer__ = "Shiwei Lan"
+__email__ = "slan@asu.edu; lanzithinking@outlook.com"
+
 import numpy as np
 from scipy import optimize
-import os, sys
-sys.path.insert(0,'/Users/mirjetapasha/Documents/Research_Projects/BesovPrior_September_9/Spatiotemporal-Besov-prior/STEMPO/')
+import os
+
 # self defined modules
 from prior import *
-from misfit_STEMPO import *
-import matplotlib
-import matplotlib.pyplot as plt
+from misfit import *
 # from posterior import *
+
 # set to warn only once for the same warnings
 import warnings
 warnings.simplefilter('once')
@@ -29,7 +42,7 @@ class STEMPO:
         np.random.seed(seed)
         sep = "\n"+"#"*80+"\n"
         # set misfit
-        self.misfit = misfit_STEMPO(**kwargs)
+        self.misfit = misfit(**kwargs)
         print('\nLikelihood model is obtained.')
         # set prior
         self.prior = prior(sz_x=self.misfit.sz_x,sz_t=self.misfit.sz_t,**kwargs)
@@ -135,8 +148,7 @@ class STEMPO:
         # solve for MAP
         start = time.time()
         # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-        res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':2,'disp':True})
-        # res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':500,'disp':True})
+        res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':1000,'disp':True})
         # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
         end = time.time()
         print('\nTime used is %.4f' % (end-start))
@@ -153,7 +165,7 @@ class STEMPO:
             import pickle
             fld_name='properties'
             self._check_folder(fld_name)
-            f = open(os.path.join(fld_name,'MAP.pckl'),'wb')
+            f = open(os.path.join(fld_name,'MAP_'+self.misfit.data_src+'.pckl'),'wb')
             pickle.dump(MAP, f)
             f.close()
         
@@ -211,26 +223,25 @@ if __name__ == '__main__':
     seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
+    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    stmpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
+    data_src='real'
+    stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed)
     # # test
-    # emj.test(1e-8)
+    # stpo.test(1e-8)
     # obtain MAP
-    map_v = stmpo.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
+    map_v = stpo.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
-    # #  compare it with the truth
-    # true_param = emj.misfit.truth # no truth
-    # map_f = emj.prior.vec2fun(map_v).reshape(true_param.shape)
-    # relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
-    # print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
-    # # report the minimum cost
-    # # min_cost = emj._get_misfit(map_v)
-    # # print('Minimum cost: %.4f' % min_cost)
+    #  compare it with the truth
+    if stpo.misfit.data_src=='simulation':
+        true_param = stpo.misfit.truth
+        map_f = stpo.prior.vec2fun(map_v).reshape(true_param.shape, order='F')
+        relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
+        print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
+    # report the minimum cost
+    min_cost = stpo._get_misfit(map_v)
+    print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = stmpo.prior.vec2fun(map_v).reshape(np.append(stmpo.misfit.sz_x,stmpo.misfit.sz_t),order='F').swapaxes(0,1)
-    stmpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')
-    xx = map_f.reshape((stmpo.misfit.sz_x[0], stmpo.misfit.sz_x[1], stmpo.misfit.sz_t))
-    plt.imshow(xx[:, :, 3])
-    plt.imshow(xx[:, :, 9])
+    map_f = stpo.prior.vec2fun(map_v).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+    stpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP_'+data_src)

@@ -260,7 +260,7 @@ if __name__ == '__main__':
     # print('The negative logarithm of likelihood at anisoTV reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
     
     # # reconstruct the images by LSE
-    # x_hat=msft.reconstruct_lse(lmda=10)
+    # x_hat=msft.reconstruct_LSE(lmda=10)
     # # plot
     # # import matplotlib.pyplot as plt
     # msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE')

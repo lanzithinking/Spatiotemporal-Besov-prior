@@ -176,13 +176,13 @@ class misfit(object):
         L = sps.vstack((sps.kron(sps.eye(sz_t),D_x),sps.kron(D_t,sps.eye(np.prod(sz_x)))))
         return L
     
-    def reconstruct_anisoTV(self):
+    def reconstruct_anisoTV(self, iter=5):
         """
         Reconstruct images by anisoTV
         """
         A, b, AA, B, nx, ny, nt, delta = self._gen_emoji()
         L = self._anisoTV((nx,ny),nt)
-        xhat = GKS(A, b, L, 1, 5, 0, 0)
+        xhat = GKS(A, b, L, 1, iter, 0, 0)
         xx = np.reshape(xhat, (128,128,33), order="F")
         return xx
     
@@ -255,7 +255,7 @@ if __name__ == '__main__':
     # print('The negative logarithm of likelihood at anisoTV reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
     
     # # reconstruct the images by LSE
-    # x_hat=msft.reconstruct_lse(lmda=10)
+    # x_hat=msft.reconstruct_LSE(lmda=10)
     # # plot
     # # import matplotlib.pyplot as plt
     # msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE')

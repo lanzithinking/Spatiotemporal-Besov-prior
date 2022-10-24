@@ -271,10 +271,11 @@ class misfit(object):
         L = self._anisoTV((nx,ny),nt)
         try:
             from package.gks import GKS
+            (xx, x_history, lambdah, lambda_history) = GKS(A, b, L, 1, iter)
         except Exception as e:
             print(e)
             from gks_tools import GKS
-        (xx, x_history, lambdah, lambda_history) = GKS(A, b, L, 1, iter)
+            xx = GKS(A, b, L, 1, iter)
         xx = np.reshape(xx, (nx, ny, nt), order="F")
         return xx
     
@@ -312,7 +313,7 @@ if __name__ == '__main__':
     from prior import *
     
     # define the misfit
-    data_src = 'real'
+    data_src = 'simulation'
     msft = misfit(data_src=data_src)
     # define the prior
     pri = prior(sz_x=msft.sz_x,sz_t=msft.sz_t)

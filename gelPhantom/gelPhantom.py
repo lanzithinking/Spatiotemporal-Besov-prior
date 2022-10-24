@@ -1,12 +1,26 @@
+#!/usr/bin/env python
+"""
+Class definition of the dynamic linear inverse problem of gelPhantom.
+Shiwei Lan @ ASU 2022
+--------------------------------------------------------------------------
+Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
+"""
+__author__ = "Mirjeta Pasha"
+__copyright__ = "Copyright 2022, The STBP project"
+__license__ = "GPL"
+__version__ = "0.1"
+__maintainer__ = "Shiwei Lan"
+__email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import numpy as np
 from scipy import optimize
-import os, sys
-sys.path.insert(0, "/home/mpasha3/CIL/CILDemos/CIL-Demos/examples/3_Multichannel")
+import os
+
 # self defined modules
 from prior import *
-from misfit_GP import *
+from misfit import *
 # from posterior import *
+
 # set to warn only once for the same warnings
 import warnings
 warnings.simplefilter('once')
@@ -28,10 +42,10 @@ class gelPhantom:
         np.random.seed(seed)
         sep = "\n"+"#"*80+"\n"
         # set misfit
-        self.misfit_GP = misfit_GP(**kwargs)
+        self.misfit = misfit(**kwargs)
         print('\nLikelihood model is obtained.')
         # set prior
-        self.prior = prior(sz_x=self.misfit_GP.sz_x,sz_t=self.misfit_GP.sz_t,**kwargs)
+        self.prior = prior(sz_x=self.misfit.sz_x,sz_t=self.misfit.sz_t,**kwargs)
         print('\nPrior model is specified.')
         # set low-rank approximate Gaussian posterior
         # self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
@@ -46,16 +60,16 @@ class gelPhantom:
         Initialize parameter with a quick but rough reconstruction
         """
         reconstruction_method='reconstruct_'+init_opt
-        if hasattr(self.misfit_GP, reconstruction_method):
-            reconstruct=getattr(self.misfit_GP,reconstruction_method)
+        if hasattr(self.misfit, reconstruction_method):
+            reconstruct=getattr(self.misfit,reconstruction_method)
         self.init_parameter = self.prior.fun2vec(reconstruct(**kwargs))
     
-    def _get_misfit_GP(self, parameter, MF_only=False):
+    def _get_misfit(self, parameter, MF_only=True):
         """
         Compute the misfit (default), or the negative log-posterior for given parameter.
         """
         # evaluate data-misfit function
-        msft = self.misfit_GP.cost(self.prior.vec2fun(parameter))
+        msft = self.misfit.cost(self.prior.vec2fun(parameter))
         if not MF_only: msft += self.prior.cost(parameter)
         return msft
     
@@ -64,7 +78,7 @@ class gelPhantom:
         Compute the gradient of misfit (default), or the gradient of negative log-posterior for given parameter.
         """
         # obtain the gradient
-        grad = self.prior.fun2vec(self.misfit_GP.grad(self.prior.vec2fun(parameter)).flatten(order='F'))
+        grad = self.prior.fun2vec(self.misfit.grad(self.prior.vec2fun(parameter)).flatten(order='F'))
         if not MF_only: grad += self.prior.grad(parameter)
         return grad
 
@@ -89,7 +103,7 @@ class gelPhantom:
         
         # get log-likelihood
         if any(s>=0 for s in geom_ord):
-            loglik = -self._get_misfit_GP(parameter, **kwargs)
+            loglik = -self._get_misfit(parameter, **kwargs)
         
         # get gradient
         if any(s>=1 for s in geom_ord):
@@ -122,7 +136,7 @@ class gelPhantom:
         # param0 = self.prior.sample('vec')
         if not hasattr(self, 'init_parameter'): self._init_param(**kwargs)
         param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
-        fun = lambda parameter: self._get_misfit_GP(parameter, MF_only=False)
+        fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
         global Nfeval
         Nfeval=1
@@ -194,9 +208,9 @@ class gelPhantom:
         ## gradient
         print('\nChecking gradient:')
         parameter_p = parameter + h*v
-        loglik_p = -self._get_misfit_GP(parameter_p)
+        loglik_p = -self._get_misfit(parameter_p)
 #         parameter_m = parameter - h*v
-#         loglik_m = -self._get_misfit_GP(parameter_m)
+#         loglik_m = -self._get_misfit(parameter_m)
         dloglikv_fd = (loglik_p-loglik)/h
         dloglikv = grad.dot(v.flatten())
         rdiff_gradv = np.abs(dloglikv_fd-dloglikv)/np.linalg.norm(v)
@@ -209,23 +223,23 @@ if __name__ == '__main__':
     seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
+    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    glPhantom = gelPhantom(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
+    gph = gelPhantom(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
     # # test
-    # emj.test(1e-8)
+    # gph.test(1e-8)
     # obtain MAP
-    map_v = glPhantom.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
+    map_v = gph.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     # #  compare it with the truth
-    # true_param = emj.misfit.truth # no truth
-    # map_f = emj.prior.vec2fun(map_v).reshape(true_param.shape)
+    # true_param = gph.misfit.truth # no truth
+    # map_f = gph.prior.vec2fun(map_v).reshape(true_param.shape)
     # relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
     # print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
     # # report the minimum cost
-    # # min_cost = emj._get_misfit_GP(map_v)
+    # # min_cost = gph._get_misfit(map_v)
     # # print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = glPhantom.prior.vec2fun(map_v).reshape(np.append(glPhantom.misfit_GP.sz_x,glPhantom.misfit_GP.sz_t),order='F').swapaxes(0,1)
-    glPhantom.misfit_GP.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')
+    map_f = gph.prior.vec2fun(map_v).reshape(np.append(gph.misfit.sz_x,gph.misfit.sz_t),order='F').swapaxes(0,1)
+    gph.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')

@@ -226,7 +226,7 @@ if __name__ == '__main__':
     spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    data_src='real'
+    data_src='simulation'
     stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed)
     # # test
     # stpo.test(1e-8)

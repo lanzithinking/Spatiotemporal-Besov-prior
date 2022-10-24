@@ -16,19 +16,20 @@
 
 # load environment
 # module load python/3.7.1
-module load anaconda3/2020.2
-# install astra+pylops when running it for the first time:
+# module load anaconda3/2020.2
+module load anaconda3/5.3.0
+# install cil+pylops when running it for the first time:
 # cd /home/slan7/Projects/STBP/code
 # conda activate base
-# conda create --prefix=astra -c astra-toolbox astra-toolbox
-# conda activate ./astra
+# conda create --prefix=cil -c conda-forge -c intel -c ccpi -c astra-toolbox cil cil-astra
+# conda activate ./cil
 # conda install --channel conda-forge pylops
-# activate astra
-source activate /home/slan7/Projects/STBP/code/astra
+# activate cil
+source activate /home/slan7/Projects/STBP/code/cil
 
 # go to working directory
-cd ~/Projects/STBP/code/STEMPO
+cd ~/Projects/STBP/code/gelPhantom
 
 # run python script
-python -u STEMPO.py #> STEMPO-MAP.log &
-# sbatch --job-name=STEMPO --output=STEMPO.log getMAP_STEMPO.sh
+python -u gelPhantom.py #> gelPhantom-MAP.log &
+# sbatch --job-name=gelPhantom --output=gelPhantom.log getMAP_gelPhantom.sh

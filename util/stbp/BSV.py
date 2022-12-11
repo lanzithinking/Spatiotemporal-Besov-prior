@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -172,8 +172,10 @@ class BSV:
         eigv,eigf = self.eigs() # obtain eigen-basis
         if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
         C = (eigf*pow(eigv,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
-        # if self.spdapx and not sps.issparse(C):
-        #     warnings.warn('Possible memory overflow!')
+        if type(C) is np.matrix:
+            C=C.getA()
+        if self.spdapx and not sps.issparse(C):
+            warnings.warn('Possible memory overflow!')
         return C
     
     def mult(self,v,**kwargs):
@@ -256,33 +258,6 @@ class BSV:
             y=self.mult(x,alpha=alpha,**kwargs)
         return y
     
-    def logdet(self):
-        """
-        Compute log-determinant of the kernel C: log|C|
-        """
-        eigv,_=self.eigs()
-        abs_eigv=abs(eigv)
-        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
-        return ldet
-    
-    def logpdf(self,X):
-        """
-        Compute logpdf of centered Besov distribution X ~ Besov(0,C)
-        """
-        if not self.spdapx:
-            _,eigf = self.eigs()
-            proj_X = eigf.T.dot(self.act(X, alpha=-1/self.q))
-            q_ldet=-X.shape[1]*self.logdet()/self.q
-        else:
-            basisf=getattr(self,'_'+self.basis_opt) # obtain basis function
-            eigf=basisf()
-            qrt_eigv=self._qrteigv()
-            q_ldet=-X.shape[1]*np.sum(np.log(qrt_eigv))
-            proj_X=eigf.T.dot(X)/qrt_eigv[:,None]
-        qsum=-0.5*np.sum(abs(proj_X)**self.q)
-        logpdf=q_ldet+qsum
-        return logpdf,q_ldet
-    
     def update(self,sigma2=None,l=None):
         """
         Update the eigen-basis
@@ -297,6 +272,31 @@ class BSV:
             if self.store_eig:
                 self.eigv,self.eigf=self.eigs(upd=True)
         return self
+    
+    def logdet(self):
+        """
+        Compute log-determinant of the kernel C: log|C|
+        """
+        eigv,_=self.eigs()
+        abs_eigv=abs(eigv)
+        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
+        return ldet
+    
+    def logpdf(self,X,incldet=True):
+        """
+        Compute logpdf of centered Besov distribution X ~ Besov(0,C)
+        """
+        eigv,eigf=self.ker.eigs()
+        if not self.spdapx:
+            proj_X = eigf.T.dot(self.act(X, alpha=-1/self.q))
+            q_ldet=-X.shape[1]*self.logdet()/self.q if incldet else 0
+        else:
+            qrt_eigv=eigv**(1/self.q)
+            q_ldet=-X.shape[1]*np.sum(np.log(qrt_eigv)) if incldet else 0
+            proj_X=eigf.T.dot(X)/qrt_eigv[:,None]
+        qsum=-0.5*np.sum(abs(proj_X)**self.q)
+        logpdf=q_ldet+qsum
+        return logpdf,q_ldet
     
     def rnd(self,n=1):
         """

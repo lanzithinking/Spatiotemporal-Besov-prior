@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -62,6 +62,8 @@ class EPP:
         self.sigma2=self.parameters.get('sigma2',1) # magnitude
         self.l=self.parameters.get('l',0.5) # correlation length
         self.s=self.parameters.get('s',2) # smoothness
+        self.dist_kwargs=dict()
+        if self.dist_f=='minkowski': self.dist_kwargs['p']=self.s
         self.nu=self.parameters.get('nu',0.5) # matern class order
         self.q=self.parameters.get('q',1) # norm power
         self.jit=self.parameters.get('jit',1e-6) # jitter
@@ -83,29 +85,29 @@ class EPP:
             # obtain partial eigen-basis
             self.eigv,self.eigf=self.eigs(**kwargs)
     
-    def _powexp(self,*args):
+    def _powexp(self,*args,**kwargs):
         """
         Powered exponential kernel: C(x,y)=sigma2*exp(-.5*(||x-y||/l)^s)
         """
         if len(args)==1:
-            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)))+(1.+self.jit)*np.eye(self.N)
+            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,**kwargs)/self.l,self.s)))+(1.+self.jit)*np.eye(self.N)
         elif len(args)==2:
-            C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,p=self.s)/self.l,self.s))
+            C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,**kwargs)/self.l,self.s))
         else:
             print('Wrong number of inputs!')
             raise
         C*=self.sigma2
         return C
     
-    def _matern(self,*args):
+    def _matern(self,*args,**kwargs):
         """
         Matern class kernel: C(x,y)=2^(1-nu)/Gamma(nu)*(sqrt(2*nu)*(||x-y||/l)^s)^nu*K_nu(sqrt(2*nu)*(||x-y||/l)^s)
         """
         if len(args)==1:
-            scal_dist=np.sqrt(2.*self.nu)*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)
-            C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*spsd.squareform(pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist))+(1.+self.jit)*np.eye(self.N)
+            scal_dist=np.sqrt(2.*self.nu)*pow(spsd.pdist(args[0],self.dist_f,**kwargs)/self.l,self.s)
+            C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*spsd.squareform(pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist))+(1.+self.jit)*sps.eye(self.N)
         elif len(args)==2:
-            scal_dist=np.sqrt(2*self.nu)*pow(spsd.cdist(args[0],args[1],self.dist_f,p=self.s)/self.l,self.s)
+            scal_dist=np.sqrt(2*self.nu)*pow(spsd.cdist(args[0],args[1],self.dist_f,**kwargs)/self.l,self.s)
             C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist)
             C[scal_dist==0]=1
         else:
@@ -121,15 +123,15 @@ class EPP:
         alpha=kwargs.get('alpha',1)
         if alpha==1:
             kerf=getattr(self,'_'+self.ker_opt) # obtain kernel function
-            C=kerf(self.x)
-            if type(C) is np.matrix:
-                C=C.getA()
-            if self.spdapx and not sps.issparse(C):
-                warnings.warn('Possible memory overflow!')
+            C=kerf(self.x,**self.dist_kwargs)
         else:
             eigv,eigf=self.eigs() # obtain eigen-basis
             if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
             C=(eigf*pow(eigv,alpha)).dot(eigf.T) + self.jit*sps.eye(self.N)
+        if type(C) is np.matrix:
+            C=C.getA()
+        if self.spdapx and not sps.issparse(C):
+            warnings.warn('Possible memory overflow!')
         return C
     
     def mult(self,v,**kwargs):
@@ -147,7 +149,7 @@ class EPP:
 #                     import pydevd; pydevd.settrace()
                     nproc=self.comm.size; rank=self.comm.rank
                     if nproc==1: raise Exception('Only one process found!')
-                    Cv_loc=multf(kerf(self.x[rank::nproc,:],self.x),v,transp)
+                    Cv_loc=multf(kerf(self.x[rank::nproc,:],self.x,**self.dist_kwargs),v,transp)
                     Cv=np.empty_like(v)
                     self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
                     pidx=np.concatenate([np.arange(self.N)[i::nproc] for i in np.arange(nproc)])
@@ -158,8 +160,8 @@ class EPP:
                     prun=False
                     pass
             if not prun:
-#                 Cv=np.squeeze([multf(kerf(x_i[np.newaxis,:],self.x),v,transp) for x_i in self.x],1+transp)
-                Cv=np.concatenate([multf(kerf(x_i[np.newaxis,:],self.x),v,transp) for x_i in self.x])
+#                 Cv=np.squeeze([multf(kerf(x_i[np.newaxis,:],self.x,**self.dist_kwargs),v,transp) for x_i in self.x],1+transp)
+                Cv=np.concatenate([multf(kerf(x_i[np.newaxis,:],self.x,**self.dist_kwargs),v,transp) for x_i in self.x])
             if transp: Cv=Cv.swapaxes(0,1)
             Cv+=self.sigma2*self.jit*v
         return Cv
@@ -219,51 +221,19 @@ class EPP:
         elif alpha==-1:
             y=self.solve(x,**kwargs)
         else:
-            eigv,eigf=self.eigs(**kwargs)
-            if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
-            y=multf(eigf*pow(eigv,alpha),multf(eigf.T,x,transp),transp)
-        return y
-    
-    def logdet(self):
-        """
-        Compute log-determinant of the kernel C: log|C|
-        """
-        eigv,_=self.eigs()
-        abs_eigv=abs(eigv)
-        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
-        return ldet
-    
-    def logpdf(self,X,chol=True,out='logpdf'):
-        """
-        Compute logpdf of centered exponential power distribution X ~ EPD(0,C,q)
-        """
-        assert X.shape[0]==self.N, "Non-conforming size!"
-        if not self.spdapx:
+            chol= (abs(alpha)==0.5) and kwargs.get('chol',not self.spdapx)
             if chol:
                 try:
-                    cholC,lower=spla.cho_factor(self.tomat())
-                    if out=='logpdf': half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC)))
-                    quad=X*spla.cho_solve((cholC,lower),X)
+                    cholC=spla.cholesky(self.tomat(),lower=True)
+                    y=multf(cholC,x,transp) if alpha>0 else mdivf(cholC,x,transp)
                 except Exception as e:#spla.LinAlgError:
                     warnings.warn('Cholesky decomposition failed: '+str(e))
-                    chol=False
-                    pass
+                    chol=False; pass
             if not chol:
-                if out=='logpdf': half_ldet=-X.shape[1]*self.logdet()/2
-                quad=X*self.solve(X)
-        else:
-            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit]+=self.jit
-            if out=='logpdf': half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
-            half_quad=eigf.T.dot(X)/rteigv[:,None]
-            quad=half_quad**2
-        norms=abs(np.sum(quad,axis=0))**(self.q/2)
-        if out=='logpdf':
-            quad=-0.5*np.sum(norms)
-            # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
-            logpdf=half_ldet+quad#+scal_fctr
-            return logpdf,half_ldet#,scal_fctr
-        elif out=='norms':
-            return norms
+                eigv,eigf=self.eigs(**kwargs)
+                if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
+                y=multf(eigf*pow(eigv,alpha),multf(eigf.T,x,transp),transp)
+        return y
     
     def update(self,sigma2=None,l=None):
         """
@@ -279,6 +249,46 @@ class EPP:
             if self.store_eig:
                 self.eigv,self.eigf=self.eigs(upd=True)
         return self
+    
+    def logdet(self):
+        """
+        Compute log-determinant of the kernel C: log|C|
+        """
+        eigv,_=self.eigs()
+        abs_eigv=abs(eigv)
+        ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
+        return ldet
+    
+    def logpdf(self,X,chol=True,out='logpdf',incldet=True):
+        """
+        Compute logpdf of centered exponential power distribution X ~ EPD(0,C,q)
+        """
+        assert X.shape[0]==self.N, "Non-conforming size!"
+        if not self.spdapx:
+            if chol:
+                try:
+                    cholC,lower=spla.cho_factor(self.tomat())
+                    if out=='logpdf': half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC))) if incldet else 0
+                    quad=X*spla.cho_solve((cholC,lower),X)
+                except Exception as e:#spla.LinAlgError:
+                    warnings.warn('Cholesky decomposition failed: '+str(e))
+                    chol=False
+                    pass
+            if not chol:
+                if out=='logpdf': half_ldet=-X.shape[1]*self.logdet()/2 if incldet else 0
+                quad=X*self.solve(X)
+        else:
+            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit]+=self.jit
+            if out=='logpdf': half_ldet=-X.shape[1]*np.sum(np.log(rteigv)) if incldet else 0
+            quad=(eigf.T.dot(X)/rteigv[:,None])**2
+        norms=abs(np.sum(quad,axis=0))**(self.q/2)
+        if out=='logpdf':
+            quad=-0.5*np.sum(norms)
+            # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
+            logpdf=half_ldet+quad#+scal_fctr
+            return logpdf,half_ldet#,scal_fctr
+        elif out=='norms':
+            return norms
     
     def rnd(self,n=1,MU=None):
         """

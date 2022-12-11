@@ -200,7 +200,7 @@ if __name__ == '__main__':
     prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='fun')
     # generate sample
     u=prior.sample()
-    # u=np.random.rand(prior.N)
+    # u=np.random.rand(prior.N,)
     nlogpri=prior.cost(u)
     ngradpri=prior.grad(u)
     print('The negative logarithm of prior density at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nlogpri,np.linalg.norm(ngradpri)))

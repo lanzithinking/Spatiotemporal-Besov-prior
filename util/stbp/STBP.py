@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -72,8 +72,8 @@ class STBP(BSV):
             print('Parallel environment not found. It may run slowly in serial.')
             self.comm=None
         self.spdapx=self.parameters.get('spdapx',self.N>1e3)
-        # self.store_eig=store_eig
-        self.store_eig=False # Use BSV and qEP eigen-decomposition, not its own!
+        self.store_eig=store_eig
+        # self.store_eig=False # Use BSV and qEP eigen-decomposition, not its own!
         if self.store_eig:
             # obtain partial eigen-basis
             self.eigv,self.eigf=self.eigs(**kwargs)
@@ -83,59 +83,10 @@ class STBP(BSV):
         Get kernel as matrix
         """
         alpha=kwargs.get('alpha',1)
-        eigv_=pow(self.gamma**self.bsv.q,alpha)
-        if alpha<0: eigv_[abs(eigv_)<np.finfo(float).eps]=np.finfo(float).eps
-        _,Phi_x=self.bsv.eigs(self.L)
-        C_x=(Phi_x*eigv_[None,:]).dot(Phi_x.T) + ((alpha>=0)*self.bsv.jit)*sps.eye(self.I)
-        C=sps.block_diag((sps.csr_matrix(C_x),)*self.J,format='csr') # (IJ,IJ)
+        C = [self.bsv.tomat(alpha=alpha),self.qep.tomat(alpha=alpha)] # (IxI,JxJ)
         # if self.spdapx and not sps.issparse(C):
         #     warnings.warn('Possible memory overflow!')
         return C
-    
-    # def tomat(self,**kwargs):
-    #     """
-    #     Get kernel as matrix
-    #     """
-    #     alpha=kwargs.get('alpha',1)
-    #     C = np.kron(self.qep.tomat(alpha=alpha),self.bsv.tomat(alpha=alpha)) # (IJ,IJ)
-    #     # if self.spdapx and not sps.issparse(C):
-    #     #     warnings.warn('Possible memory overflow!')
-    #     return C
-    
-#     def mult(self,v,**kwargs):
-#         """
-#         Kernel multiply a function (vector): C*v
-#         """
-#         alpha=kwargs.pop('alpha',1) # power of dynamic eigenvalues
-#         if not self.spdapx:
-#             if v.shape[0]!=self.N:
-#                 v=v.reshape((self.N,-1),order='F')
-#             Cv=self.tomat(alpha=alpha).dot(v)
-#         else:
-#             eigv,eigf = self.eigs() # obtain eigen-pairs
-#             if alpha<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
-#             eigv_ = pow(eigv,alpha)
-#             prun=kwargs.get('prun',True) and self.comm # control of parallel run
-#             if prun:
-#                 try:
-# #                     import pydevd; pydevd.settrace()
-#                     nproc=self.comm.size; rank=self.comm.rank
-#                     if nproc==1: raise Exception('Only one process found!')
-#                     Cv_loc=multf(eigf[rank::nproc,:].multiply(eigv_),multf(eigf.T,v))
-#                     Cv=np.empty_like(v)
-#                     self.comm.Allgatherv([Cv_loc,MPI.DOUBLE],[Cv,MPI.DOUBLE])
-#                     pidx=np.concatenate([np.arange(self.N)[i::nproc] for i in np.arange(nproc)])
-#                     Cv[pidx]=Cv.copy()
-#                 except Exception as e:
-#                     if rank==0:
-#                         warnings.warn('Parallel run failed: '+str(e))
-#                     prun=False
-#                     pass
-#             if not prun:
-# #                 Cv=np.concatenate([multf(eigf_i*eigv,multf(eigf.T,v)) for eigf_i in eigf])
-#                 Cv=multf(eigf.multiply(eigv_),multf(eigf.T,v))
-#             Cv+=self.bsv.jit*v
-#         return Cv
     
     def mult(self,v,**kwargs):
         """
@@ -150,24 +101,8 @@ class STBP(BSV):
             if v.shape[0]!=self.I:
                 v=v.reshape((self.I,self.J,-1),order='F')
             if np.ndim(v)<3: v=v[:,:,None]
-            Cv=self.bsv.mult(v,alpha=alpha).reshape((self.N,-1),order='F') # (IJ,K_)
+            Cv=self.qep.act(self.bsv.mult(v,alpha=alpha),alpha=alpha,transp=True).reshape((self.N,-1),order='F') # (IJ,K_)
         return Cv
-    
-    # def mult(self,v,**kwargs):
-    #     """
-    #     Kernel multiply a function (vector): C*v
-    #     """
-    #     alpha=kwargs.pop('alpha',1) # power of dynamic eigenvalues
-    #     if not self.spdapx:
-    #         if v.shape[0]!=self.N:
-    #             v=v.reshape((self.N,-1),order='F')
-    #         Cv=self.tomat(alpha=alpha).dot(v)
-    #     else:
-    #         if v.shape[0]!=self.I:
-    #             v=v.reshape((self.I,self.J,-1),order='F')
-    #         if np.ndim(v)<3: v=v[:,:,None]
-    #         Cv=self.qep.act(self.bsv.mult(v,alpha=alpha),alpha=alpha,transp=True).reshape((self.N,-1),order='F') # (IJ,K_)
-    #     return Cv
     
     def solve(self,v,**kwargs):
         """
@@ -178,44 +113,33 @@ class STBP(BSV):
     def eigs(self,L=None,upd=False,**kwargs):
         """
         Obtain partial eigen-basis
-        C * eigf_i = eigf_i * eigv_i, i=1,...,L, with eigf = I_t Ox Phi_x
+        C * eigf_i = eigf_i * eigv_i, i=1,...,L
         """
-        warnings.warn("Using STBP's own eigen-decomposition is unnecessarily slow!")
         if L is None:
             L=self.L;
         if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
             L=min(L,self.N)
-            gamma=self.gamma[:L] if L <=self.L else self.bsv._qrteigv(L)
-            eigv=np.tile(gamma**self.bsv.q,self.J) # (LJ,)
-            _,eigf=self.bsv.eigs(L);
-            eigf=sps.kron(sps.eye(self.J),eigf).tocsc() # (IJ,LJ)
+            rtL=np.sqrt(L)
+            rtL=int(rtL)+(not rtL.is_integer())
+            lambda_x,Phi_x=self.bsv.eigs(rtL); lambda_t,Phi_t=self.qep.eigs(rtL)
+            if not np.sqrt(L).is_integer():
+                if lambda_x[-1]<lambda_t[-1]:
+                    lambda_x=lambda_x[:-1]; Phi_x=Phi_x[:,:-1]
+                else:
+                    lambda_t=lambda_t[:-1]; Phi_t=Phi_t[:,:-1]
+            eigv=[lambda_x,lambda_t]; eigf=[Phi_x,Phi_t]
         else:
             eigv,eigf=self.eigv,self.eigf
             if L<self.L:
-                eigv=eigv.reshape((-1,self.L))[:,:L].flatten(); # (LJ,1)
-                eigf=eigf.reshape((self.N,-1,self.L))[:,:,:L].reshape((self.N,-1)) # (IJ,LJ)
+                rtL=np.sqrt(L)
+                rtL=int(rtL)+(not rtL.is_integer())
+                eigv = [eig[:rtL] for eig in eigv]; eigf = [eig[:,rtL] for eig in eigf]
+                if not np.sqrt(L).is_integer():
+                    if eigv[0][-1]<eigv[1][-1]:
+                        eigv[0]=eigv[0][:-1]; eigf[0]=eigf[0][:,:-1]
+                    else:
+                        eigv[1]=eigv[1][:-1]; eigf[1]=eigf[1][:,:-1]
         return eigv,eigf
-    
-    # def eigs(self,L=None,upd=False,**kwargs):
-    #     """
-    #     Obtain partial eigen-basis
-    #     C * eigf_i = eigf_i * eigv_i, i=1,...,L
-    #     """
-    #     if L is None:
-    #         L=self.L;
-    #     if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
-    #         L=min(L,self.N)
-    #         lambda_t,Phi_t=self.qep.eigs(); lambda_x,Phi_x=self.bsv.eigs()
-    #         eigv=np.kron(lambda_t,lambda_x); eigf=np.kron(Phi_t,Phi_x) # (IJ,L)
-    #         if L<=self.bsv.L*self.qep.L:
-    #             eigv=eigv[:L]; eigf=eigf[:,:L]
-    #         else:
-    #             warnings.warn('Requested too many eigenvalues!')
-    #     else:
-    #         eigv,eigf=self.eigv,self.eigf
-    #         if L<self.L:
-    #             eigv=eigv[:L]; eigf=eigf[:,:L]
-    #     return eigv,eigf
     
     def act(self,x,alpha=1,**kwargs):
         """
@@ -223,29 +147,6 @@ class STBP(BSV):
         y=C^alpha *x
         """
         return BSV.act(self,x,alpha=alpha,**kwargs)
-    
-    def logdet(self):
-        """
-        Compute log-determinant of the kernel C: log|C|
-        """
-        return BSV.logdet(self)
-    
-    def logpdf(self,X):
-        """
-        Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
-        """
-        if not self.spdapx:
-            logpdf,q_ldet=BSV.logpdf(self,self.qep.act(X.reshape((self.J,self.I,-1)).reshape((self.N,-1)),alpha=-.5))
-        else:
-            eigv,eigf=self.bsv.eigs();
-            abs_eigv=abs(eigv)
-            q_ldet=-X.shape[1]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J
-            proj_X=eigf.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
-            proj_X=proj_X.reshape((self.J,-1))
-            qep_norm=self.qep.logpdf(proj_X,out='norms')
-            qsum=-0.5*np.sum(qep_norm**(self.bsv.q/self.qep.q))
-            logpdf=q_ldet+qsum
-        return logpdf,q_ldet
     
     def update(self,bsv=None,qep=None):
         """
@@ -258,6 +159,33 @@ class STBP(BSV):
         if self.store_eig:
             self.eigv,self.eigf=self.eigs(upd=True)
         return self
+    
+    def logdet(self):
+        """
+        Compute log-determinant of the kernel C: log|C|
+        """
+        return BSV.logdet(self)
+    
+    def logpdf(self,X,incldet=True):
+        """
+        Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
+        """
+        if not self.spdapx:
+            logpdf,q_ldet=BSV.logpdf(self,self.qep.act(X.reshape((self.J,self.I,-1)).reshape((self.N,-1)),alpha=-.5),incldet=incldet)
+        else:
+            if X.shape[0]!=self.I: X=X.reshape((self.I,self.J,-1),order='F')
+            if np.ndim(X)<3: X=X[:,:,None]
+            eigv,eigf=self.bsv.eigs();
+            abs_eigv=abs(eigv)
+            # q_ldet=-X.shape[1]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J if incldet else 0
+            # proj_X=eigf.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
+            q_ldet=-X.shape[2]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J if incldet else 0
+            proj_X=np.tensordot(eigf.T,X,1)/eigv[:,None,None]**(1.0/self.bsv.q) # (L,J,K_)
+            proj_X=proj_X.swapaxes(0,1).reshape((self.J,-1),order='F')
+            qep_norm=self.qep.logpdf(proj_X,out='norms')
+            qsum=-0.5*np.sum(qep_norm**(self.bsv.q/self.qep.q))
+            logpdf=q_ldet+qsum
+        return logpdf,q_ldet
     
     def rnd(self,n=1):
         """
@@ -278,7 +206,7 @@ if __name__=='__main__':
     ## spatial class
     # x=np.random.rand(64**2,2)
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
-    xx,yy=np.meshgrid(np.linspace(0,1,64),np.linspace(0,1,64))
+    xx,yy=np.meshgrid(np.linspace(0,1,16),np.linspace(0,1,16))
     x=np.stack([xx.flatten(),yy.flatten()]).T
     bsv=BSV(x,L=100,store_eig=True,basis_opt='wavelet', q=1.0) # constrast with q=2.0
     ## temporal class
@@ -308,13 +236,13 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t2-t1))
 
-#     v=stbp.rnd(n=2)
-#     invCv=spsla.spsolve(C,v)
-# #     C_op=spsla.LinearOperator((stbp.N,)*2,matvec=lambda v:stbp.mult(v))
-# #     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
-#     invCv_te=stbp.act(v,-1)
-#     if verbose:
-#         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
+    v=stbp.rnd(n=2)
+    invCv=spsla.spsolve(C,v)
+#     C_op=spsla.LinearOperator((stbp.N,)*2,matvec=lambda v:stbp.mult(v))
+#     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
+    invCv_te=stbp.act(v,-1)
+    if verbose:
+        print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
 
     X=stbp.rnd(n=10)
     logpdf,_=stbp.logpdf(X)
@@ -328,9 +256,9 @@ if __name__=='__main__':
     u=stbp.rnd()
     v=stbp.rnd()
     h=1e-7
-    dlogpdfv_fd=(stbp.logpdf(u+h*v)[0]-stbp.logpdf(u)[0])/h
+    dlogpdfv_fd=(stbp.logpdf(u+h*v,incldet=False)[0]-stbp.logpdf(u,incldet=False)[0])/h
     dlogpdfv=-stbp.solve(u).T.dot(v)
-    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v) # this in general is not small because of C_t; try small correlation length in qEP, e.g. l=0.001 
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v) # this in general is not small because of C_t; try small correlation length in qEP, e.g. l=1e-8 
     if verbose:
         print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
     if verbose:

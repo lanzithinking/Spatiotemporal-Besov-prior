@@ -19,7 +19,7 @@ from emoji import emoji
 # MCMC
 import sys
 sys.path.append( "../" )
-from sampler.wMALA import wMALA
+from sampler.winfMALA import winfMALA
 
 
 np.set_printoptions(precision=3, suppress=True)
@@ -30,11 +30,11 @@ def main(seed=2022):
     parser = argparse.ArgumentParser()
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
-    parser.add_argument('num_samp', nargs='?', type=int, default=1)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=0)    
+    parser.add_argument('num_samp', nargs='?', type=int, default=5000)
+    parser.add_argument('num_burnin', nargs='?', type=int, default=2000)    
     parser.add_argument('alg_NO', nargs='?', type=int, default=0)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(.01,))
-    parser.add_argument('algs', nargs='?', type=str, default=('wpCN',))
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(9e-8,))
+    parser.add_argument('algs', nargs='?', type=str, default=('winfMALA',))
     args = parser.parse_args()
     
     # set random seed
@@ -45,17 +45,44 @@ def main(seed=2022):
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
-    logLik = lambda u: -emj._get_misfit(u, MF_only=True)
+    # logLik = lambda u: -emj._get_misfit(u, MF_only=True)
     # transformation
     nmlz = lambda z,q=1: z/np.linalg.norm(z,axis=1)[:,None]**q
-    Lmd = lambda z,q=emj.prior.qep.q: emj.prior.qep.act(nmlz(z.reshape((-1,emj.prior.qep.N),order='F'),1-2/q),alpha=0.5,transp=True)
-    T = lambda z,q=emj.prior.bsv.q: emj.prior.C_act(Lmd(z), 1/q)
+    # Lmd = lambda z,q=emj.prior.qep.q: emj.prior.qep.act(nmlz(z.reshape((-1,emj.prior.qep.N),order='F'),1-2/q),alpha=0.5,transp=True)
+    def Lmd(z, q=emj.prior.qep.q, grad=False):
+        _z = z.reshape((-1,emj.prior.qep.N),order='F') # (L,J)
+        nm_z = np.linalg.norm(_z,axis=1)[:,None]
+        lmd = emj.prior.qep.act(_z*nm_z**(2/q-1),alpha=0.5,transp=True)#,chol=False) # (L,J)
+        if grad:
+            # return lambda v: emj.prior.qep.act(_z*z.dot(v)*nm_z**(2/q-3)*(2/q-1) + v.reshape((-1,emj.prior.qep.N),order='F')*nm_z**(2/q-1), alpha=0.5,transp=True)
+            def dlmd(v, adj=False):
+                _v = v.reshape((-1,emj.prior.qep.N),order='F')
+                if adj:
+                    _v = emj.prior.qep.act(_v, alpha=0.5,transp=True,adjt=adj)#,chol=False)
+                    return _z*np.sum(_z*_v,axis=1)[:,None]*nm_z**(2/q-3)*(2/q-1) + _v*nm_z**(2/q-1)
+                else:
+                    return emj.prior.qep.act(_z*np.sum(_z*_v,axis=1)[:,None]*nm_z**(2/q-3)*(2/q-1) + _v*nm_z**(2/q-1), alpha=0.5,transp=True)#,chol=False)
+            return dlmd
+        else:
+            return lmd
+    # T = lambda z,q=emj.prior.bsv.q: emj.prior.C_act(Lmd(z), 1/q)
+    def T(z, q=emj.prior.bsv.q, grad=False):
+        if grad:
+            return lambda v,adj=False: Lmd(z, grad=grad)(emj.prior.C_act(v, 1/q),adj=adj).flatten(order='F') if adj else emj.prior.C_act(Lmd(z, grad=grad)(v), 1/q)
+        else:
+            return emj.prior.C_act(Lmd(z), 1/q)
     invLmd = lambda xi,q=emj.prior.qep.q: nmlz(emj.prior.qep.act(xi.reshape((-1,emj.prior.qep.N),order='F'),alpha=-0.5,transp=True),1-q/2)
     invT = lambda u,q=emj.prior.bsv.q: invLmd(emj.prior.C_act(u, -1/q))
-    
-    eigv, _=emj.prior.bsv.eigs()
-    #D_lmd = dT(lmd)/d lmd [prior.tomat**1/q] * d(misfit)/d(T(lmd))
-    D_lmd = lambda x,q=emj.prior.bsv.q: sps.diags(np.tile(eigv**(1/q), emj.prior.J)).dot(emj._get_grad(T(x)))
+    # log-likelihood
+    def logLik(u, T=None, grad=False):
+        parameter = T(u) if callable(T) else u
+        geom_ord=[0]+[int(grad)]
+        l,g = emj.get_geom(parameter, geom_ord, MF_only=True)[:2]
+        if grad:
+            if callable(T): g = T(u, grad=True)(g,adj=True)
+            return l,g.squeeze()
+        else:
+            return l
     
     # initialization random noise epsilon
     try:
@@ -69,14 +96,15 @@ def main(seed=2022):
     except Exception as e:
         print(e)
         u=np.random.randn({'vec':emj.prior.L*emj.prior.qep.N,'fun':emj.prior.N}[emj.prior.space])
-    l=logLik(T(u))
-    # current energy I(u0, u)
-    h = args.step_sizes[args.alg_NO]
-    beta = 4*np.sqrt(h)/(4+h)
-    E_cur = l + h/8*D_lmd(u).dot(D_lmd(u)) - np.sqrt(h)/2*D_lmd(u).dot((u - np.sqrt(1-beta**2)*u)/beta) 
+    l,g=logLik(u,T,grad=True)
+    # # test dlogLik
+    # h=1e-8; v=emj.prior.sample()
+    # l1=logLik(u+h*v,T)
+    # print('test error: %0.4f' %(abs((l1-l)/h-g.dot(v))/np.linalg.norm(v)))
     
     # run MCMC to generate samples
-    print("Running the whitened preconditioned MALA (wMALA) for %s prior model taking random seed %d ..." % ('Besov', args.seed_NO))
+    print("Preparing %s sampler with step size %g for random seed %d..."
+          % (args.algs[args.alg_NO],args.step_sizes[args.alg_NO],args.seed_NO))
     
     samp=[]; loglik=[]; times=[]
     accp=0; acpt=0
@@ -89,7 +117,7 @@ def main(seed=2022):
             print('\nBurn-in completed; recording samples now...\n')
         # generate MCMC sample with given sampler
         
-        u,l,E_cur,acpt_ind=wMALA(u,l,E_cur,D_lmd,logLik,T,h=h)
+        u,l,g,acpt_ind=winfMALA(u,l,g,logLik,T,args.step_sizes[args.alg_NO])
         # display acceptance at intervals
         if i+1 in prog:
             print('{0:.0f}% has been completed.'.format(np.float(i+1)/(args.num_samp+args.num_burnin)*100))
@@ -116,7 +144,7 @@ def main(seed=2022):
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
     savepath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(savepath): os.makedirs(savepath)
-    filename='emj_wpCN_dim'+str(len(u))+'_'+ctime
+    filename='emj_'+args.algs[args.alg_NO]+'_dim'+str(len(u))+'_'+ctime
     np.savez_compressed(os.path.join(savepath,filename),spat_args=spat_args, temp_args=temp_args, args=args, samp=samp,loglik=loglik,time_=time_,times=times)
     
     # plot

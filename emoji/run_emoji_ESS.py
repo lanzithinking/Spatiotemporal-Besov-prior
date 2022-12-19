@@ -39,7 +39,7 @@ def main(seed=2022):
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
-    logLik = lambda u: -emj._get_misfit(u, MF_only=True)
+    # logLik = lambda u: -emj._get_misfit(u, MF_only=True)
     rnd_pri = lambda:np.random.randn({'vec':emj.prior.L*emj.prior.qep.N,'fun':emj.prior.N}[emj.prior.space])
     # transformation
     nmlz = lambda z,q=1: z/np.linalg.norm(z,axis=1)[:,None]**q
@@ -47,6 +47,8 @@ def main(seed=2022):
     T = lambda z,q=emj.prior.bsv.q: emj.prior.C_act(Lmd(z), 1/q)
     invLmd = lambda xi,q=emj.prior.qep.q: nmlz(emj.prior.qep.act(xi.reshape((-1,emj.prior.qep.N),order='F'),alpha=-0.5,transp=True),1-q/2)
     invT = lambda u,q=emj.prior.bsv.q: invLmd(emj.prior.C_act(u, -1/q))
+    # log-likelihood
+    logLik = lambda u,T=None: -emj._get_misfit(T(u) if callable(T) else u, MF_only=True)
     
     # initialization random noise epsilon
     try:

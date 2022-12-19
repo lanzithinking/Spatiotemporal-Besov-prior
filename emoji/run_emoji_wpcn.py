@@ -44,13 +44,15 @@ def main(seed=2022):
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
-    logLik = lambda u: -emj._get_misfit(u, MF_only=True)
+    # logLik = lambda u: -emj._get_misfit(u, MF_only=True)
     # transformation
     nmlz = lambda z,q=1: z/np.linalg.norm(z,axis=1)[:,None]**q
     Lmd = lambda z,q=emj.prior.qep.q: emj.prior.qep.act(nmlz(z.reshape((-1,emj.prior.qep.N),order='F'),1-2/q),alpha=0.5,transp=True)
     T = lambda z,q=emj.prior.bsv.q: emj.prior.C_act(Lmd(z), 1/q)
     invLmd = lambda xi,q=emj.prior.qep.q: nmlz(emj.prior.qep.act(xi.reshape((-1,emj.prior.qep.N),order='F'),alpha=-0.5,transp=True),1-q/2)
     invT = lambda u,q=emj.prior.bsv.q: invLmd(emj.prior.C_act(u, -1/q))
+    # log-likelihood
+    logLik = lambda u,T=None: -emj._get_misfit(T(u) if callable(T) else u, MF_only=True)
     
     # initialization random noise epsilon
     try:
@@ -67,7 +69,8 @@ def main(seed=2022):
     l=logLik(T(u))
     
     # run MCMC to generate samples
-    print("Running the whitened preconditioned Crank-Nicolson (wpCN) for %s prior model taking random seed %d ..." % ('Besov', args.seed_NO))
+    print("Preparing %s sampler with step size %g for random seed %d..."
+          % (args.algs[args.alg_NO],args.step_sizes[args.alg_NO],args.seed_NO))
     
     samp=[]; loglik=[]; times=[]
     accp=0; acpt=0
@@ -106,7 +109,7 @@ def main(seed=2022):
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
     savepath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(savepath): os.makedirs(savepath)
-    filename='emj_wpCN_dim'+str(len(u))+'_'+ctime
+    filename='emj_'+args.algs[args.alg_NO]+'_dim'+str(len(u))+'_'+ctime
     np.savez_compressed(os.path.join(savepath,filename),spat_args=spat_args, temp_args=temp_args, args=args, samp=samp,loglik=loglik,time_=time_,times=times)
     
     # plot

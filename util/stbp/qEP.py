@@ -224,7 +224,7 @@ class qEP:
             chol= (abs(alpha)==0.5) and kwargs.get('chol',not self.spdapx)
             if chol:
                 try:
-                    cholC=spla.cholesky(self.tomat(),lower=True)
+                    cholC=spla.cholesky(self.tomat(),lower=not kwargs.get('adjt',False))
                     y=multf(cholC,x,transp) if alpha>0 else mdivf(cholC,x,transp)
                 except Exception as e:#spla.LinAlgError:
                     warnings.warn('Cholesky decomposition failed: '+str(e))

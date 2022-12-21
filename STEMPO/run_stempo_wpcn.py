@@ -44,7 +44,7 @@ def main(seed=2022):
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     data_src='simulation'
-    stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed)
+    stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed, init_param=True)
     # logLik = lambda u: -stpo._get_misfit(u, MF_only=True)
     # transformation
     nmlz = lambda z,q=1: z/np.linalg.norm(z,axis=1)[:,None]**q

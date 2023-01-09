@@ -1,5 +1,5 @@
 """
-Main function to run whitened preconditioned Crank-Nicolson sampling for the time series problem
+Main function to run whitened preconditioned Crank-Nicolson sampling for the dynamic linear inverse problem of STEMPO.
 ----------------------
 Shiwei Lan @ ASU, 2022
 ----------------------
@@ -20,9 +20,10 @@ import sys
 sys.path.append( "../" )
 from sampler.wpCN import wpCN
 
-
+# basic settings
 np.set_printoptions(precision=3, suppress=True)
-# np.random.seed(2022)
+import warnings
+warnings.filterwarnings(action="once")
 
 def main(seed=2022):
     
@@ -32,7 +33,7 @@ def main(seed=2022):
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=2000)    
     parser.add_argument('alg_NO', nargs='?', type=int, default=0)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(.01,))
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(2e-3,))
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN',))
     args = parser.parse_args()
     
@@ -41,6 +42,7 @@ def main(seed=2022):
     
     # define emoji Bayesian inverse problem
     spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
+    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':1,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     data_src='simulation'
@@ -52,8 +54,9 @@ def main(seed=2022):
     T = lambda z,q=stpo.prior.bsv.q: stpo.prior.C_act(Lmd(z), 1/q)
     invLmd = lambda xi,q=stpo.prior.qep.q: nmlz(stpo.prior.qep.act(xi.reshape((-1,stpo.prior.qep.N),order='F'),alpha=-0.5,transp=True),1-q/2)
     invT = lambda u,q=stpo.prior.bsv.q: invLmd(stpo.prior.C_act(u, -1/q))
+    # ldetdLmd = lambda z,q=stpo.prior.qep.q: (2/q-1)*stpo.prior.qep.N*np.log(np.linalg.norm(z.reshape((-1,stpo.prior.qep.N),order='F'),axis=1)).sum()
     # log-likelihood
-    logLik = lambda u,T=None: -stpo._get_misfit(T(u) if callable(T) else u, MF_only=True)
+    logLik = lambda u,T=None: -stpo._get_misfit(T(u) if callable(T) else u, MF_only=True) #+ (ldetdLmd(u) if callable(T) else 0)
     
     # initialization random noise epsilon
     try:
@@ -67,7 +70,7 @@ def main(seed=2022):
     except Exception as e:
         print(e)
         u=np.random.randn({'vec':stpo.prior.L*stpo.prior.qep.N,'fun':stpo.prior.N}[stpo.prior.space])
-    l=logLik(T(u))
+    l=logLik(u,T)
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for random seed %d..."
@@ -119,10 +122,13 @@ def main(seed=2022):
     
     mcmc_v_med = np.median(samp,axis=0)
     mcmc_v_mean = np.mean(samp,axis=0)
+    mcmc_v_std = np.std(samp,axis=0)
     mcmc_f = stpo.prior.vec2fun(mcmc_v_med).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
     stpo.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
     mcmc_f = stpo.prior.vec2fun(mcmc_v_mean).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
     stpo.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
+    mcmc_f = stpo.prior.vec2fun(mcmc_v_std).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+    stpo.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
 
 
 if __name__ == '__main__':

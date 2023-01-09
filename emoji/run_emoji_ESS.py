@@ -1,5 +1,5 @@
 """
-Main function to run elliptic slice sampling for the time series problem
+Main function to run elliptic slice sampling for the dynamic linear inverse problem of emoji.
 ----------------------
 Shiwei Lan @ ASU, 2022
 """
@@ -36,6 +36,7 @@ def main(seed=2022):
     
     # define emoji Bayesian inverse problem
     spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
+    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)

@@ -8,7 +8,7 @@ Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -51,9 +51,9 @@ class STEMPO:
         # self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
         # print('\nApproximate posterior model is set.\n')
         if kwargs.pop('init_param',False):
-            # obtain an initial parameter from a rough reconstruction
+            # obtain an initial parameter from a coarse reconstruction
             self._init_param()
-        # self.prior.mean = self.init_parameter
+        # if self.prior.mean is None: self.prior.mean = self.init_parameter
     
     def _init_param(self,init_opt='anisoTV',**kwargs):
         """
@@ -82,12 +82,16 @@ class STEMPO:
         if not MF_only: grad += self.prior.grad(parameter)
         return grad
 
-    def _get_HessApply(self, parameter=None, MF_only=True):
+    def _get_HessApply(self, parameter, MF_only=True):
         """
         Compute the Hessian apply (action) for given parameter,
         default to the Gauss-Newton approximation.
         """
-        raise NotImplementedError('HessApply not implemented.')
+        # obtain the Hessian
+        # hess_ = lambda v: self.prior.fun2vec(self.misfit.Hess(self.prior.vec2fun(parameter))(self.prior.vec2fun(v)))
+        hess_ = lambda v: self.prior.fun2vec(self.misfit.Hess()(self.prior.vec2fun(v)))
+        hess = hess_ if MF_only else lambda v: hess_(v) + self.prior.Hess(parameter)(v)
+        return hess
     
     def get_geom(self,parameter=None,geom_ord=[0],**kwargs):
         """
@@ -111,7 +115,7 @@ class STEMPO:
         
         # get Hessian Apply
         if any(s>=1.5 for s in geom_ord):
-            pass
+            HessApply = self._get_HessApply(parameter,**kwargs) # Hmisfit if MF is true
         
         # get estimated eigen-decomposition for the Hessian (or Gauss-Newton)
         if any(s>1 for s in geom_ord):
@@ -129,6 +133,7 @@ class STEMPO:
         """
         Get the maximum a posterior (MAP).
         """
+        ncg = kwargs.pop('NCG',False) # choose whether to use conjugate gradient optimization method
         import time
         sep = "\n"+"#"*80+"\n"
         print( sep, "Find the MAP point", sep)
@@ -138,6 +143,7 @@ class STEMPO:
         param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
+        if ncg: hessp = lambda parameter, v: self._get_HessApply(parameter, MF_only=False)(v)
         global Nfeval
         Nfeval=1
         def call_back(Xi):
@@ -147,9 +153,12 @@ class STEMPO:
         print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))
         # solve for MAP
         start = time.time()
-        # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-        res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':1000,'disp':True})
-        # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
+        if ncg:
+            # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, hessp=hessp, callback=call_back, options={'maxiter':100,'disp':True})
+            res = optimize.minimize(fun, param0, method='trust-ncg', jac=grad, hessp=hessp, callback=call_back, options={'maxiter':100,'disp':True})
+        else:
+            # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
+            res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':1000,'disp':True})
         end = time.time()
         print('\nTime used is %.4f' % (end-start))
         # print out info
@@ -182,7 +191,7 @@ class STEMPO:
             print('Save path does not exist; created one.')
             os.makedirs(self.savepath)
     
-    def test(self,h=1e-4):
+    def test(self,h=1e-4,MF_only=True):
         """
         Demo to check results with the exact method against the finite difference method.
         """
@@ -196,7 +205,7 @@ class STEMPO:
         # obtain the geometric quantities
         print('\n\nObtaining geometric quantities by direct calculation...')
         start = time.time()
-        loglik,grad,_,_ = self.get_geom(parameter,geom_ord=[0,1])
+        loglik,grad,HessApply,_ = self.get_geom(parameter,geom_ord=[0,1,2],MF_only=MF_only)
         end = time.time()
         print('Time used is %.4f' % (end-start))
         
@@ -208,13 +217,20 @@ class STEMPO:
         ## gradient
         print('\nChecking gradient:')
         parameter_p = parameter + h*v
-        loglik_p = -self._get_misfit(parameter_p)
+        loglik_p = -self._get_misfit(parameter_p,MF_only=MF_only)
 #         parameter_m = parameter - h*v
-#         loglik_m = -self._get_misfit(parameter_m)
+#         loglik_m = -self._get_misfit(parameter_m,MF_only=MF_only)
         dloglikv_fd = (loglik_p-loglik)/h
         dloglikv = grad.dot(v.flatten())
         rdiff_gradv = np.abs(dloglikv_fd-dloglikv)/np.linalg.norm(v)
         print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+        ## Hessian
+        print('\nChecking Hessian:')
+        grad_p = -self._get_grad(parameter_p,MF_only=MF_only)
+        dgradv_fd = -(grad_p-grad)/h
+        dgradv = HessApply(v)
+        rdiff_hessv = np.linalg.norm(dgradv_fd-dgradv)/np.linalg.norm(v)
+        print('Relative difference of Hessian-action in a random direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
         end = time.time()
         print('Time used is %.4f' % (end-start))
     
@@ -228,10 +244,10 @@ if __name__ == '__main__':
     store_eig = True
     data_src='simulation'
     stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed)
-    # # test
-    # stpo.test(1e-8)
+    # test
+    stpo.test(1e-8, MF_only=False)
     # obtain MAP
-    map_v = stpo.get_MAP(SAVE=True)#,init_opt='LSE',lmda=10)
+    map_v = stpo.get_MAP(SAVE=True, NCG=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     #  compare it with the truth
     if stpo.misfit.data_src=='simulation':

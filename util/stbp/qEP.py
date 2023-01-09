@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -24,7 +24,6 @@ import scipy.linalg as spla
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 import scipy.spatial.distance as spsd
-from scipy.special import gammaln
 # self defined modules
 import sys
 sys.path.append( "../../" )
@@ -90,7 +89,7 @@ class qEP:
         Powered exponential kernel: C(x,y)=sigma2*exp(-.5*(||x-y||/l)^s)
         """
         if len(args)==1:
-            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,**kwargs)/self.l,self.s)))+(1.+self.jit)*np.eye(self.N)
+            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,**kwargs)/self.l,self.s)))+(1.+self.jit)*sps.eye(self.N)
         elif len(args)==2:
             C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,**kwargs)/self.l,self.s))
         else:
@@ -285,7 +284,7 @@ class qEP:
         if out=='logpdf':
             quad=-0.5*np.sum(norms)
             log_r=np.log(np.sum(norms))*self.N/2*(1-2/self.q)
-            # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
+            # scal_fctr=X.shape[1]*(np.log(self.q)-self.N/2*np.log(np.pi)-(1+self.N/2)*np.log(2))
             logpdf=half_ldet+quad+log_r#+scal_fctr
             return logpdf,half_ldet#,scal_fctr
         elif out=='norms':
@@ -297,7 +296,8 @@ class qEP:
         """
         uS_rv=np.random.randn(self.N,n) # (N,n)
         uS_rv/=np.linalg.norm(uS_rv,axis=0,keepdims=True)
-        rv=np.random.gamma(shape=self.N/2,scale=2,size=n)**(1./self.q)*self.act(uS_rv,alpha=0.5)
+        # rv=np.random.gamma(shape=self.N/2,scale=2,size=n)**(1./self.q)*self.act(uS_rv,alpha=0.5)
+        rv=np.random.chisquare(df=self.N,size=n)**(1./self.q)*self.act(uS_rv,alpha=0.5)
         if MU is not None:
             rv+=MU
         return rv
@@ -310,7 +310,7 @@ if __name__=='__main__':
     
     x=np.linspace(0,1,100)[:,np.newaxis]
     # x=np.random.rand(100,1) 
-    qep=qEP(x,L=50,store_eig=True,ker_opt='matern',l=.2,nu=1.5,q=1.5)
+    qep=qEP(x,L=50,store_eig=True,ker_opt='matern',l=.2,nu=1.5,q=1)
     verbose=qep.comm.rank==0 if qep.comm is not None else True
     if verbose:
         print('Eigenvalues :', np.round(qep.eigv[:min(10,qep.L)],4))

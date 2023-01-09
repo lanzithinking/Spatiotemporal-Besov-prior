@@ -1,5 +1,5 @@
 """
-Main function to run whitened preconditioned Crank-Nicolson sampling for the time series problem
+Main function to run whitened preconditioned Crank-Nicolson sampling for the dynamic linear inverse problem of STEMPO.
 ----------------------
 Shiwei Lan @ ASU, 2022
 ----------------------
@@ -21,9 +21,10 @@ import sys
 sys.path.append( "../" )
 from sampler.winfMALA import winfMALA
 
-
+# basic settings
 np.set_printoptions(precision=3, suppress=True)
-# np.random.seed(2022)
+import warnings
+warnings.filterwarnings(action="once")
 
 def main(seed=2022):
     
@@ -42,6 +43,7 @@ def main(seed=2022):
     
     # define emoji Bayesian inverse problem
     spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
+    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':1,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     data_src='simulation'
@@ -66,6 +68,15 @@ def main(seed=2022):
             return dlmd
         else:
             return lmd
+    # def ldetdLmd(z, q=stpo.prior.qep.q, grad=False):
+    #     _z = z.reshape((-1,stpo.prior.qep.N),order='F') # (L,J)
+    #     nm_z = np.linalg.norm(_z,axis=1)[:,None]
+    #     ldet = (2/q-1)*stpo.prior.qep.N*np.log(nm_z).sum()
+    #     if grad:
+    #         dldet = (2/q-1)*stpo.prior.qep.N*_z/nm_z**2
+    #         return ldet, dldet.flatten(order='F')
+    #     else:
+    #         return ldet,
     # T = lambda z,q=stpo.prior.bsv.q: stpo.prior.C_act(Lmd(z), 1/q)
     def T(z, q=stpo.prior.bsv.q, grad=False):
         if grad:
@@ -79,8 +90,11 @@ def main(seed=2022):
         parameter = T(u) if callable(T) else u
         geom_ord=[0]+[int(grad)]
         l,g = stpo.get_geom(parameter, geom_ord, MF_only=True)[:2]
+        # if callable(T):
+        #     ldet = ldetdLmd(u, grad=grad)
+        #     l += ldet[0]
         if grad:
-            if callable(T): g = T(u, grad=True)(g,adj=True)
+            if callable(T): g = T(u, grad=True)(g,adj=True) #+ ldet[1]
             return l,g.squeeze()
         else:
             return l
@@ -154,10 +168,13 @@ def main(seed=2022):
     
     mcmc_v_med = np.median(samp,axis=0)
     mcmc_v_mean = np.mean(samp,axis=0)
+    mcmc_v_std = np.std(samp,axis=0)
     mcmc_f = stpo.prior.vec2fun(mcmc_v_med).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
     stpo.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
     mcmc_f = stpo.prior.vec2fun(mcmc_v_mean).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
     stpo.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
+    mcmc_f = stpo.prior.vec2fun(mcmc_v_std).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+    stpo.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
 
 
 if __name__ == '__main__':

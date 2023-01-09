@@ -7,7 +7,7 @@ Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -46,7 +46,7 @@ class misfit(object):
         self.data_src = kwargs.pop('data_src','simulation') # data source
         self.obs, nzvar, self.sz_x, self.sz_t, self.truth = self.get_obs(**kwargs)
         # self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
-        self.nzcov = self.nzlvl * max(nzvar) * ( sps.eye(nzvar.shape[0]))
+        self.nzcov = self.nzlvl * max(nzvar) * ( sps.eye(nzvar.shape[0], format='csr'))
     
     def _gen_stempo(self, source=None):
         """
@@ -195,8 +195,7 @@ class misfit(object):
             save_obs=kwargs.pop('save_obs',True)
             if save_obs:
                 np.savez_compressed(os.path.join(obs_file_loc,obs_file_name), obs=obs, nzvar=nzvar, sz_x=sz_x, sz_t=sz_t, truth=truth)
-            print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
-    
+            print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')    
         return obs, nzvar, sz_x, sz_t, truth
     
     def cost(self, u=None, obs=None):
@@ -234,6 +233,23 @@ class misfit(object):
             # g.append( ops_proj[i].T.dot(spla.solve(self.nzcov,dif_obs,sym_pos=True)) )
             g.append( ops_proj[i].T.dot(spsla.spsolve(self.nzcov,dif_obs[:,i])) )
         return np.stack(g).T # (I,J)
+    
+    def Hess(self, u=None, obs=None):
+        """
+        Compute the Hessian action of misfit
+        """
+        ops_proj, obs_proj = self.obs
+        # if obs is None:
+        #     if u.shape[0]!=np.prod(self.sz_x):
+        #         u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+        #     obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
+        
+        def hess(v):
+            if v.shape[0]!=np.prod(self.sz_x):
+                v=v.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+            obs_v = np.stack([ops_proj[j].dot(v[:,j]) for j in range(self.sz_t)]).T
+            return self.grad(obs=obs_v+np.stack(obs_proj).T)
+        return hess
     
     def noise(self):
         """
@@ -325,6 +341,7 @@ if __name__ == '__main__':
     nll=msft.cost(u)
     grad=msft.grad(u)
     print('The negative logarithm of likelihood at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    hess=msft.Hess(u)
     # test
     # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
     v=pri.sample('fun').reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
@@ -333,6 +350,10 @@ if __name__ == '__main__':
     gradv=np.sum(grad*v)
     rdiff_gradv=np.abs(gradv_fd-gradv)/np.linalg.norm(v)
     print('Relative difference of gradients in a direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+    hessv_fd=(msft.grad(u+h*v)-grad)/h
+    hessv=hess(v)
+    rdiff_hessv=np.linalg.norm(hessv_fd-hessv)/np.linalg.norm(v)
+    print('Relative difference of Hessian-action in a direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     

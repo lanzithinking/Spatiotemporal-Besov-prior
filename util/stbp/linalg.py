@@ -32,7 +32,7 @@ import scipy.sparse.linalg as spsla
 # self defined modules
 import sys
 sys.path.append( "../../" )
-from util.stgp.__init__ import *
+from util.stbp.__init__ import *
 
 # set to warn only once for the same warnings
 import warnings

@@ -8,7 +8,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -41,7 +41,7 @@ class misfit(object):
         # get observations
         self.obs, nzcov, self.sz_x, self.sz_t = self.get_obs(**kwargs)
         # self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
-        self.nzcov = self.nzlvl * max(np.diag(nzcov)) * ( sps.eye(nzcov.shape[0]))
+        self.nzcov = self.nzlvl * max(np.diag(nzcov)) * ( sps.eye(nzcov.shape[0], format='csr'))
     
     def _gen_crossPhantom(self):
         """
@@ -150,6 +150,23 @@ class misfit(object):
             g.append( ops_proj[i].T.dot(spsla.spsolve(self.nzcov,dif_obs[:,i])) )
         return np.stack(g).T # (I,J)
     
+    def Hess(self, u=None, obs=None):
+        """
+        Compute the Hessian action of misfit
+        """
+        ops_proj, obs_proj = self.obs
+        # if obs is None:
+        #     if u.shape[0]!=np.prod(self.sz_x):
+        #         u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+        #     obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
+        
+        def hess(v):
+            if v.shape[0]!=np.prod(self.sz_x):
+                v=v.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+            obs_v = np.stack([ops_proj[j].dot(v[:,j]) for j in range(self.sz_t)]).T
+            return self.grad(obs=obs_v+np.stack(obs_proj).T)
+        return hess
+    
     # @staticmethod
     # def is_diag(a):
     #     diag_elem = a.diagonal().copy()
@@ -181,14 +198,14 @@ class misfit(object):
         L = sps.vstack((sps.kron(sps.eye(sz_t),D_x),sps.kron(D_t,sps.eye(np.prod(sz_x)))))
         return L
     
-    def reconstruct_anisoTV(self):
+    def reconstruct_anisoTV(self, iter=5):
         """
         Reconstruct images by anisoTV
         """
         A, b, AA, B, nx, ny, nt, delta = self._gen_crossPhantom()
         L = self._anisoTV((nx,ny),nt)
-        xhat = GKS(A, b, L, 1, 5, 0, 0)
-        xx = np.reshape(xhat, (128,128,16), order="F")
+        xhat = GKS(A, b, L, 1, iter, 0, 0)
+        xx = np.reshape(xhat, (nx,ny,nt), order="F")
         return xx
     
     def reconstruct_LSE(self,lmda=0):
@@ -236,6 +253,7 @@ if __name__ == '__main__':
     nll=msft.cost(u)
     grad=msft.grad(u)
     print('The negative logarithm of likelihood at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    hess=msft.Hess(u)
     # test
     # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
     v=pri.sample('fun').reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
@@ -244,6 +262,10 @@ if __name__ == '__main__':
     gradv=np.sum(grad*v)
     rdiff_gradv=np.abs(gradv_fd-gradv)/np.linalg.norm(v)
     print('Relative difference of gradients in a direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+    hessv_fd=(msft.grad(u+h*v)-grad)/h
+    hessv=hess(v)
+    rdiff_hessv=np.linalg.norm(hessv_fd-hessv)/np.linalg.norm(v)
+    print('Relative difference of Hessian-action in a direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     

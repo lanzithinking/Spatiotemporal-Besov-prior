@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.7"
+__version__ = "1.0"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -54,6 +54,8 @@ class BSV:
         if self.x.ndim==1: self.x=self.x[:,None]
         self.parameters=kwargs # all parameters of the kernel
         self.basis_opt=self.parameters.get('basis_opt','Fourier') # basis option
+        if self.basis_opt=='wavelet':
+            self.wvlet_typ=self.parameters.get('wvlet_typ','Harr') # wavelet type
         self.sigma2=self.parameters.get('sigma2',1) # magnitude
         self.l=self.parameters.get('l',0.5) # correlation length
         self.s=self.parameters.get('s',2) # smoothness
@@ -77,7 +79,7 @@ class BSV:
             # obtain partial eigen-basis
             self.eigv,self.eigf=self.eigs(**kwargs)
     
-    def _Fourier(self, x=None, L=None):
+    def _Fourier(self, x=None, L=None, **kwargs):
         """
         Fourier basis
         """
@@ -89,7 +91,7 @@ class BSV:
             f=np.cos(np.pi*x*np.arange(L)); f[:,0]/=np.sqrt(2) # (N,L)
         elif self.d==2:
             rtL=int(np.sqrt(L))
-            f=np.cos(np.pi*x[:,[0]]*(np.arange(rtL)+0.5))[:,:,None]*np.cos(np.pi*x[:,None,[1]]*(np.arange(rtL)+0.5)) # (N,rtL,rtL)
+            f=np.cos(np.pi*x[:,[0]]*(np.arange(rtL)+0.5))[:,:,None]*np.cos(np.pi*x[:,[1]]*(np.arange(rtL)+0.5))[:,None,:] # (N,rtL,rtL)
             f=f.reshape((-1,rtL**2))
             resL=L-rtL**2
             if resL>0:
@@ -101,9 +103,34 @@ class BSV:
             raise NotImplementedError('Basis for spatial dimension larger than 2 is not implemented yet!')
         return f
     
-    def _wavelet(self, x=None, L=None, d=None):
+    def _Mexican_hat(self, x=None, L=None, sigma=1):
         """
-        (Harr) wavelet basis
+        Mexican hat wavelet, a.k.a. the Ricker wavelet
+        """
+        if x is None:
+            x=self.x
+        if L is None:
+            L=self.L
+        if self.d==1:
+            psi=lambda x: 2/(np.sqrt(3*sigma)*np.pi**(1/4))*(1-(x/sigma)**2)*np.exp(-x**2/(2*sigma**2))
+            psi_jk=lambda x, j, k=0: 2**(j/2) * psi(2**j * x - k)
+        elif self.d==2:
+            psi2=lambda x: 1/(np.pi*sigma**4)*(1-1/2*(np.sum(x**2,axis=1)/sigma**2))*np.exp(-np.sum(x**2,axis=1)/(2*sigma**2))
+            psi_jk=lambda x, j, k=0: 2**(j/2) * psi2(2**j * x - k)
+        else:
+            raise NotImplementedError('Basis for spatial dimension larger than 2 is not implemented yet!')
+        n=int(np.log2(L))
+        f=np.empty((self.N,0))
+        for j in range(n):
+            f=np.append(f,np.stack([psi_jk(x, j, k) for k in range(2**j)]).T,axis=-1)
+        if L>2**n:
+            f=np.append(f,np.stack([psi_jk(x, n, k) for k in range(L+1-2**n)]).T,axis=-1) # (N,L)
+        f/=np.linalg.norm(f,axis=0)
+        return f
+    
+    def _wavelet(self, x=None, L=None, d=None, **kwargs):
+        """
+        Common wavelet bases including Harr, Shannon, Meyer, Mexican Hat, Poisson, etc.
         """
         if x is None:
             x=self.x
@@ -111,12 +138,30 @@ class BSV:
             L=self.L
         if d is None:
             d=self.d
-        # phi=np.sinc
-        # psi=lambda x: 2*np.sinc(2*x)-np.sinc(x) # Shannon wavelet
-        phi=lambda x: 1.0*(x>=0)*(x<1)
-        psi=lambda x: 1.0*(x>=0)*(x<0.5) - 1.0*(x>=0.5)*(x<1) # Harr wavelet
+        if self.wvlet_typ=='Harr':
+            phi=lambda x: 1.0*(x>=0)*(x<1)
+            psi=lambda x: 1.0*(x>=0)*(x<0.5) - 1.0*(x>=0.5)*(x<1) # Harr wavelet
+        elif self.wvlet_typ=='Shannon':
+            phi=np.sinc
+            psi=lambda x: 2*np.sinc(2*x)-np.sinc(x) # Shannon wavelet
+        elif self.wvlet_typ=='Meyer':
+            phi=lambda x: ( 2/3*np.sinc(2/3*x) + 4/(3*np.pi)*np.cos(4*np.pi/3*x) )/( 1 - 16/9*x**2 )
+            psi1=lambda x: ( 4/(3*np.pi)*np.cos(2*np.pi/3*(x-1/2)) - 4/3*np.sinc(4/3*(x-1/2)) )/( 1-16/9*(x-1/2)**2 )
+            psi2=lambda x: ( 8/(3*np.pi)*np.cos(8*np.pi/3*(x-1/2)) + 4/3*np.sinc(4/3*(x-1/2)) )/( 1-64/9*(x-1/2)**2 )
+            psi=lambda x: psi1(x)+psi2(x)
+        elif self.wvlet_typ=='MexHat':
+            # return self._Mexican_hat(x, L, kwargs.pop('sigma',1))
+            phi=lambda x: np.ones((self.N,1))
+            sigma=kwargs.pop('sigma',1)
+            psi=lambda x: 2/(np.sqrt(3*sigma)*np.pi**(1/4))*(1-(x/sigma)**2)*np.exp(-x**2/(2*sigma**2))
+        elif self.wvlet_typ=='Poisson':
+            phi=lambda x: np.ones((self.N,1))
+            psi=lambda x: 1/np.pi*(1-x**2)/(1+x**2)**2
+        else:
+            raise ValueError('Wavelet type not implemented!')
         psi_jk=lambda x, j, k=0: 2**(j/2) * psi(2**j * x - k)
         if d==1:
+        # if d==2: psi_jk=lambda x, j, k=0: 2**(j) * psi(2**j * x[:,[0]] - k) * psi(2**j * x[:,[1]] - k)
             n=int(np.log2(L))
             f=phi(x)
             for j in range(n):
@@ -126,20 +171,21 @@ class BSV:
         elif d==2:
             rtL=int(np.sqrt(L))
             # rtL=np.ceil(np.sqrt(L)).astype('int')
-            f=self._wavelet(x[:,[0]], rtL, d=1)[:,:,None]*self._wavelet(x[:,None,[1]], rtL, d=1) # (N,rtL,rtL)
+            f=self._wavelet(x[:,[0]], rtL, d=1)[:,:,None]*self._wavelet(x[:,[1]], rtL, d=1)[:,None,:] # (N,rtL,rtL)
             f=f.reshape((-1,rtL**2))
             # f=f[:,:L]
             resL=L-rtL**2
             if resL>0:
-                # f=np.append(f,psi_jk(x[:,[0]],j=int(np.log2(rtL)))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1) # row convention (type='C')
-                f=np.append(f,psi_jk(x[:,[0]],j=int(np.log2(rtL)),k=np.arange(min(rtL,resL)))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1)
+                # f=np.append(f,psi_jk(x[:,[0]],j=int(np.ceil(np.log2(rtL))),k=np.arange(min(rtL,resL)))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1) # row convention (type='C')
+                f=np.append(f,psi_jk(x[:,[0]],j=int(np.ceil(np.log2(rtL))),k=rtL-2**int(np.ceil(np.log2(rtL))))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1)
                 if resL>rtL:
-                    # f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.log2(rtL))),axis=1)
-                    f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.log2(rtL)),k=np.arange(resL-rtL)),axis=1)
+                    # f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.ceil(np.log2(rtL))),k=np.arange(resL-rtL)),axis=1)
+                    f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.ceil(np.log2(rtL))),k=rtL-2**int(np.ceil(np.log2(rtL)))),axis=1)
             # f/=np.linalg.norm(f,axis=0)
             f/=np.sqrt(self.N)
         else:
             raise NotImplementedError('Basis for spatial dimension larger than 2 is not implemented yet!')
+        # f/=np.linalg.norm(f,axis=0)
         return f
     
     def _qrteigv(self, L=None):
@@ -233,7 +279,7 @@ class BSV:
             L=self.L;
         if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
             basisf=getattr(self,'_'+self.basis_opt) # obtain basis function
-            eigf=basisf(x=self.x, L=L)
+            eigf=basisf(x=self.x, L=L, **kwargs)
             if eigf.shape[1]<L:
                 eigf=np.pad(eigf,[(0,0),(0,L-eigf.shape[1])],mode='constant')
                 warnings.warn('zero eigenvectors padded!')
@@ -286,12 +332,12 @@ class BSV:
         """
         Compute logpdf of centered Besov distribution X ~ Besov(0,C)
         """
-        eigv,eigf=self.ker.eigs()
+        eigv,eigf=self.eigs()
         if not self.spdapx:
             proj_X = eigf.T.dot(self.act(X, alpha=-1/self.q))
             q_ldet=-X.shape[1]*self.logdet()/self.q if incldet else 0
         else:
-            qrt_eigv=eigv**(1/self.q)
+            qrt_eigv=abs(eigv)**(1/self.q)
             q_ldet=-X.shape[1]*np.sum(np.log(qrt_eigv)) if incldet else 0
             proj_X=eigf.T.dot(X)/qrt_eigv[:,None]
         qsum=-0.5*np.sum(abs(proj_X)**self.q)
@@ -317,7 +363,7 @@ if __name__=='__main__':
     # x=np.stack([np.sort(np.random.rand(64**2)),np.sort(np.random.rand(64**2))]).T
     xx,yy=np.meshgrid(np.linspace(0,1,128),np.linspace(0,1,128))
     x=np.stack([xx.flatten(),yy.flatten()]).T
-    bsv=BSV(x,L=1000,store_eig=True,basis_opt='wavelet', l=5, q=1.0) # constrast with q=2.0
+    bsv=BSV(x,L=1000,store_eig=True,basis_opt='wavelet',wvlet_typ='Harr',  l=1, q=1.0, sigma=.5) # constrast with q=2.0
     verbose=bsv.comm.rank==0 if bsv.comm is not None else True
     if verbose:
         print('Eigenvalues :', np.round(bsv.eigv[:min(10,bsv.L)],4))

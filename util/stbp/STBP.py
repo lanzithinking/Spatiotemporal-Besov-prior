@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.9"
+__version__ = "1.0"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -170,16 +170,17 @@ class STBP(BSV):
         """
         Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
         """
+        if X.shape[0]!=self.I: X=X.reshape((self.I,self.J,-1),order='F')
+        if np.ndim(X)<3: X=X[:,:,None]
         if not self.spdapx:
-            logpdf,q_ldet=BSV.logpdf(self,self.qep.act(X.reshape((self.J,self.I,-1)).reshape((self.N,-1)),alpha=-.5),incldet=incldet)
+            # logpdf,q_ldet=BSV.logpdf(self.bsv,self.qep.act(X,alpha=-.5,transp=True).reshape((self.I,-1),order='F'),incldet=incldet)
+            logpdf,q_ldet=self.qep.logpdf(self.bsv.act(X,alpha=-1.0/self.bsv.q).swapaxes(0,1).reshape((self.J,-1),order='F'),incldet=incldet) # works for single trial
         else:
-            if X.shape[0]!=self.I: X=X.reshape((self.I,self.J,-1),order='F')
-            if np.ndim(X)<3: X=X[:,:,None]
             eigv,eigf=self.bsv.eigs();
             abs_eigv=abs(eigv)
             # q_ldet=-X.shape[1]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J if incldet else 0
             # proj_X=eigf.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
-            q_ldet=-X.shape[2]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J if incldet else 0
+            q_ldet=-X.shape[2]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))/self.bsv.q if incldet else 0
             proj_X=np.tensordot(eigf.T,X,1)/eigv[:,None,None]**(1.0/self.bsv.q) # (L,J,K_)
             proj_X=proj_X.swapaxes(0,1).reshape((self.J,-1),order='F')
             qep_norm=self.qep.logpdf(proj_X,out='norms')
@@ -225,9 +226,9 @@ if __name__=='__main__':
         print('time: %.5f'% (t1-t0))
 
     u_samp=stbp.rnd(n=5).reshape((stbp.I,stbp.J,-1),order='F')
-    v=stbp.rnd(n=2)
+    v=stbp.rnd(n=2).reshape((stbp.I,stbp.J,-1),order='F')
     C=stbp.tomat()
-    Cv=C.dot(v)
+    Cv=multf(C[1],multf(C[0],v),transp=True).reshape((stbp.N,-1),order='F')
     Cv_te=stbp.act(v)
     if verbose:
         print('Relative difference between matrix-vector product and action on vector: {:.4f}'.format(spla.norm(Cv-Cv_te)/spla.norm(Cv)))
@@ -236,8 +237,9 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t2-t1))
 
-    v=stbp.rnd(n=2)
-    invCv=spsla.spsolve(C,v)
+    # v=stbp.rnd(n=2)
+    # invCv=spsla.spsolve(C,v)
+    invCv=mdivf(C[1],mdivf(C[0],v),transp=True).reshape((stbp.N,-1),order='F')
 #     C_op=spsla.LinearOperator((stbp.N,)*2,matvec=lambda v:stbp.mult(v))
 #     invCv=spsla.cgs(C_op,v)[0][:,np.newaxis]
     invCv_te=stbp.act(v,-1)

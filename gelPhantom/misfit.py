@@ -7,7 +7,7 @@ Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -48,7 +48,7 @@ class misfit(object):
         # get observations
         self.obs, nzvar, self.sz_x, self.sz_t, self.ig, self.ag, self.ig_small, self.ag_small, self.A_proj, self.data = self.get_obs(**kwargs)
         # self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
-        self.nzcov = self.nzlvl * max(nzvar) * ( sps.eye(nzvar.shape[0]))
+        self.nzcov = self.nzlvl * max(nzvar) * ( sps.eye(nzvar.shape[0], format='csr'))
     
     def _gen_gelPhantom(self):
         """
@@ -168,6 +168,18 @@ class misfit(object):
             g.append(self.mat_to_vec(ops_proj[i].adjoint(self.vec_to_mat(spsla.spsolve(self.nzcov,dif_obs[:,i]), self.ag_small)[0]), self.ig_small)[0])
         return np.stack(g).T # (I,J)
     
+    def Hess(self, u=None, obs=None):
+        """
+        Compute the Hessian action of misfit
+        """
+        ops_proj, obs_proj = self.obs
+        def hess(v):
+            if v.shape[0]!=np.prod(self.sz_x):
+                v=v.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+            obs_v = np.stack([self.mat_to_vec(ops_proj[i].direct(self.vec_to_mat(v[:, i], self.ig_small)[0]), self.ag_small)[0] for i in range(self.sz_t)]).T
+            return self.grad(obs=obs_v+np.stack(obs_proj).T)
+        return hess
+    
     def _anisoTV(self, sz_x=None, sz_t=None):
         """
         Anisotropic total variation operator
@@ -267,6 +279,7 @@ if __name__ == '__main__':
     nll=msft.cost(u)
     grad=msft.grad(u)
     print('The negative logarithm of likelihood at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    hess=msft.Hess(u)
     # test
     # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
     v=pri.sample('fun').reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
@@ -275,6 +288,10 @@ if __name__ == '__main__':
     gradv=np.sum(grad*v)
     rdiff_gradv=np.abs(gradv_fd-gradv)/np.linalg.norm(v)
     print('Relative difference of gradients in a direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+    hessv_fd=(msft.grad(u+h*v)-grad)/h
+    hessv=hess(v)
+    rdiff_hessv=np.linalg.norm(hessv_fd-hessv)/np.linalg.norm(v)
+    print('Relative difference of Hessian-action in a direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     

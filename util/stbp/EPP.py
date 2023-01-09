@@ -90,7 +90,7 @@ class EPP:
         Powered exponential kernel: C(x,y)=sigma2*exp(-.5*(||x-y||/l)^s)
         """
         if len(args)==1:
-            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,**kwargs)/self.l,self.s)))+(1.+self.jit)*np.eye(self.N)
+            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,**kwargs)/self.l,self.s)))+(1.+self.jit)*sps.eye(self.N)
         elif len(args)==2:
             C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,**kwargs)/self.l,self.s))
         else:
@@ -284,7 +284,7 @@ class EPP:
         norms=abs(np.sum(quad,axis=0))**(self.q/2)
         if out=='logpdf':
             quad=-0.5*np.sum(norms)
-            # scal_fctr=X.shape[1]*(np.log(self.N)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(1+self.N/self.q)-(1+self.N/self.q)*np.log(2))
+            # scal_fctr=X.shape[1]*(np.log(self.q)+gammaln(self.N/2)-self.N/2*np.log(np.pi)-gammaln(self.N/self.q)-(1+self.N/self.q)*np.log(2))
             logpdf=half_ldet+quad#+scal_fctr
             return logpdf,half_ldet#,scal_fctr
         elif out=='norms':

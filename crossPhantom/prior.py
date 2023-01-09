@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.7"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -90,15 +90,40 @@ class prior(STBP):
         if self.mean is not None:
             u-=self.mean
     
-        eigv, eigf=self.bsv.eigs()
-        eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
-        gamma=eigv**(1/self.bsv.q)
-        proj_u=((u.reshape((self.L,self.J,-1),order='F') if self.space=='vec' else eigf.T.dot(u.reshape((self.J,self.I,-1))) if self.space=='fun' else ValueError('Wrong space!'))/gamma[:,None,None]).swapaxes(0,1).reshape((self.J,-1),order='F') # (J,L)
+        # eigv, eigf=self.bsv.eigs()
+        # eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
+        # gamma=eigv**(1/self.bsv.q)
+        # proj_u=((u.reshape((self.L,self.J,-1),order='F') if self.space=='vec' else eigf.T.dot(u.reshape((self.J,self.I,-1))) if self.space=='fun' else ValueError('Wrong space!'))/gamma[:,None,None]).swapaxes(0,1).reshape((self.J,-1),order='F') # (J,L)
+        
+        proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
         qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
-        g=0.5*self.bsv.q*(qep_norm**(self.bsv.q-2) *self.qep.solve(proj_u)/gamma).swapaxes(0,1) # (L,J)
-        if self.space=='fun': g=eigf.dot(g) # (I,J)
-        g=g.reshape((u_sz,-1),order='F')
+        g=0.5*self.bsv.q*(qep_norm**(self.bsv.q-2) *self.qep.solve(proj_u)/self.gamma).swapaxes(0,1) # (L,J)
+        # if self.space=='fun': g=eigf.dot(g) # (I,J)
+        g=g.reshape((u_sz,-1),order='F') if self.space=='vec' else self.vec2fun(g) if self.space=='fun' else ValueError('Wrong space!')
         return g.squeeze()
+    
+    def Hess(self,u):
+        """
+        Calculate the Hessian action of log-prior
+        """
+        u_sz={'vec':self.L*self.J,'fun':self.N}[self.space]
+        if u.shape[0]!=u_sz:
+            u=u.reshape((u_sz,-1),order='F')
+        if self.mean is not None:
+            u-=self.mean
+        
+        proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
+        qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
+        
+        def hess(v):
+            if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
+            v=v.reshape((self.J,-1)) # (J,L_)
+            Hv=self.bsv.q*(self.bsv.q/2-1)*qep_norm**(self.bsv.q-4) *self.qep.solve(proj_u)*np.sum(proj_u*self.qep.solve(v/self.gamma),axis=0)/self.gamma
+            Hv+=0.5*self.bsv.q*qep_norm**(self.bsv.q-2) *self.qep.solve(v/self.gamma)/self.gamma
+            Hv=Hv.swapaxes(0,1) # (L,J)
+            Hv=Hv.reshape((u_sz,-1),order='F') if self.space=='vec' else self.vec2fun(Hv) if self.space=='fun' else ValueError('Wrong space!')
+            return Hv.squeeze()
+        return hess
     
     def sample(self, output_space=None, mean=None):
         """
@@ -197,13 +222,14 @@ if __name__ == '__main__':
     sz_x=128; sz_t=20
     spat_args={'basis_opt':'Fourier','sigma2':1,'l':1,'s':1.5,'q':1.0,'L':1000}
     temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
-    prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='fun')
+    prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='vec')
     # generate sample
     u=prior.sample()
-    # u=np.random.rand(prior.N)
+    # u=np.random.rand(prior.N,)
     nlogpri=prior.cost(u)
     ngradpri=prior.grad(u)
     print('The negative logarithm of prior density at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nlogpri,np.linalg.norm(ngradpri)))
+    hess=prior.Hess(u)
     # test
     h=1e-7
     v=prior.sample()
@@ -211,6 +237,10 @@ if __name__ == '__main__':
     ngradv=ngradpri.flatten().dot(v)
     rdiff_gradv=np.abs(ngradv_fd-ngradv)/np.linalg.norm(v)
     print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
+    hessv_fd=(prior.grad(u+h*v)-ngradpri)/h
+    hessv=hess(v)
+    rdiff_hessv=np.linalg.norm(hessv_fd-hessv)/np.linalg.norm(v)
+    print('Relative difference of Hessian-action in a random direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
     # plot
     import matplotlib.pyplot as plt
     if u.shape[0]!=prior.N: u=prior.vec2fun(u)

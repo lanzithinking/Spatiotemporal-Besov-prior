@@ -102,7 +102,7 @@ def main(seed=2022):
     invT = lambda u,q=emj.prior.bsv.q: invLmd(emj.prior.C_act(u, -1/q))
     
     # optimize to get MAP
-    print("Obtaining MAP estimate for %s spatial basis %s with %s kernel ..." % (args.bass[args.bas_NO], '('+args.wavs[args.wav_NO]+')' if spat_args['basis_opt']=='wavelet' else '', args.kers[args.ker_NO]))
+    print("Obtaining MAP estimate for %s spatial basis %s with %s kernel %s ..." % (args.bass[args.bas_NO], '('+args.wavs[args.wav_NO]+')' if spat_args['basis_opt']=='wavelet' else '', args.kers[args.ker_NO], {True:'using Newton CG',False:''}[args.NCG]))
     
     if not hasattr(emj,'init_parameter'): emj._init_param(init_opt='LSE',lmda=10)
     param0 = emj.init_parameter

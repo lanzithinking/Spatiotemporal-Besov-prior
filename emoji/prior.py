@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -117,10 +117,10 @@ class prior(STBP):
         
         def hess(v):
             if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
-            v=v.reshape((self.J,-1)) # (J,L_)
-            Hv=self.bsv.q*(self.bsv.q/2-1)*qep_norm**(self.bsv.q-4) *self.qep.solve(proj_u)*np.sum(proj_u*self.qep.solve(v/self.gamma),axis=0)/self.gamma
-            Hv+=0.5*self.bsv.q*qep_norm**(self.bsv.q-2) *self.qep.solve(v/self.gamma)/self.gamma
-            Hv=Hv.swapaxes(0,1) # (L,J)
+            v=v.reshape((self.L,self.J,-1),order='F').swapaxes(0,1) # (J,L,K)
+            Hv=self.bsv.q*(self.bsv.q/2-1)*qep_norm[None,:,None]**(self.bsv.q-4) *self.qep.solve(proj_u)[:,:,None]*np.sum(proj_u[:,:,None]*self.qep.solve(v/self.gamma[None,:,None]),axis=0,keepdims=True)/self.gamma[None,:,None]
+            Hv+=0.5*self.bsv.q*qep_norm[None,:,None]**(self.bsv.q-2) *self.qep.solve(v/self.gamma[None,:,None])/self.gamma[None,:,None]
+            Hv=Hv.swapaxes(0,1) # (L,J,K)
             Hv=Hv.reshape((u_sz,-1),order='F') if self.space=='vec' else self.vec2fun(Hv) if self.space=='fun' else ValueError('Wrong space!')
             return Hv.squeeze()
         return hess

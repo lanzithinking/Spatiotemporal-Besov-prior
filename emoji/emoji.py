@@ -13,13 +13,14 @@ __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import numpy as np
+import scipy.sparse.linalg as spsla
 from scipy import optimize
 import os
 
 # self defined modules
 from prior import *
 from misfit import *
-# from posterior import *
+from posterior import *
 
 # set to warn only once for the same warnings
 import warnings
@@ -63,6 +64,7 @@ class emoji:
         if hasattr(self.misfit, reconstruction_method):
             reconstruct=getattr(self.misfit,reconstruction_method)
         self.init_parameter = self.prior.fun2vec(reconstruct(**kwargs))
+        return self.init_parameter
     
     def _get_misfit(self, parameter, MF_only=True):
         """
@@ -107,27 +109,42 @@ class emoji:
         
         # get log-likelihood
         if any(s>=0 for s in geom_ord):
-            loglik = -self._get_misfit(parameter, **kwargs)
+            loglik = -self._get_misfit(parameter, kwargs.get('MF_only',True))
         
         # get gradient
         if any(s>=1 for s in geom_ord):
-            agrad = -self._get_grad(parameter, **kwargs)
+            agrad = -self._get_grad(parameter, kwargs.get('MF_only',True))
         
         # get Hessian Apply
         if any(s>=1.5 for s in geom_ord):
-            HessApply = self._get_HessApply(parameter,**kwargs) # Hmisfit if MF is true
+            HessApply = self._get_HessApply(parameter, kwargs.get('MF_only',True)) # Hmisfit if MF is true
+            # if np.max(geom_ord)<=1.5:
+            #     # adjust the gradient
+            #     agrad += HessApply(parameter)
+            #     if not kwargs.get('MF_only',False): agrad -= parameter
         
         # get estimated eigen-decomposition for the Hessian (or Gauss-Newton)
-        if any(s>1 for s in geom_ord):
-            pass
+        if any(s>1.5 for s in geom_ord):
+            # eigs = self.get_eigs(parameter, **kwargs) # eigen-pairs of HessApply
+            self.posterior = posterior(invK=spsla.LinearOperator((parameter.size,)*2,HessApply),**kwargs)
+            # eigs = self.posterior.eigs(**kwargs) # eigen-pairs of K
+            if kwargs.pop('adjust_grad',False):
+                # adjust the gradient
+                agrad += HessApply(parameter)
+                if not kwargs.get('MF_only',False): agrad -= parameter
         
         return loglik,agrad,HessApply,eigs
     
-    def get_eigs(self,parameter=None,**kwargs):
+    def get_eigs(self, **kwargs):
         """
-        Get the eigen-decomposition of Hessian action directly using randomized algorithm.
+        Get the eigen-decomposition of Hessian action (directly using randomized algorithm).
         """
-        raise NotImplementedError('eigs not implemented.')
+        k=kwargs.pop('k',int(self.prior.L/2))
+        maxiter=kwargs.pop('maxiter',100)
+        tol=kwargs.pop('tol',1e-10)
+        H_op = spsla.LinearOperator((parameter.size,)*2,HessApply)
+        eigs = spsla.eigsh(H_op,min(k,H_op.shape[0]-1),maxiter=maxiter,tol=tol)
+        return eigs
     
     def get_MAP(self,SAVE=False,**kwargs):
         """
@@ -136,7 +153,7 @@ class emoji:
         ncg = kwargs.pop('NCG',False) # choose whether to use conjugate gradient optimization method
         import time
         sep = "\n"+"#"*80+"\n"
-        print( sep, "Find the MAP point", sep)
+        print( sep, "Find the MAP point"+({True:' using Newton CG',False:''}[ncg]), sep)
         # set up initial point
         # param0 = self.prior.sample('vec')
         if not hasattr(self, 'init_parameter'): self._init_param(**kwargs)
@@ -205,7 +222,7 @@ class emoji:
         # obtain the geometric quantities
         print('\n\nObtaining geometric quantities by direct calculation...')
         start = time.time()
-        loglik,grad,HessApply,_ = self.get_geom(parameter,geom_ord=[0,1,2],MF_only=MF_only)
+        loglik,grad,HessApply,_ = self.get_geom(parameter,geom_ord=[0,1,1.5],MF_only=MF_only)
         end = time.time()
         print('Time used is %.4f' % (end-start))
         

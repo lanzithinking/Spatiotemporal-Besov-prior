@@ -7,8 +7,8 @@ Created July 25, 2016
 # dolfin related functions
 try:
     # plot Library
-    from .matplot4dolfin import matplot4dolfin
-    from .dolfin_gadget import *
+    # from .matplot4dolfin import matplot4dolfin
+    # from .dolfin_gadget import *
     from .Eigen import *
     # function to calculate effective sample size (ESS)
     from .bayesianStats import effectiveSampleSize as ess

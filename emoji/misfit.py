@@ -8,7 +8,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -17,7 +17,7 @@ import scipy as sp
 import scipy.sparse as sps
 # import scipy.linalg as spla
 import scipy.sparse.linalg as spsla
-import h5py # needed to unpack downloaded emoji data (in .mat format)
+# import h5py # needed to unpack downloaded emoji data (in .mat format)
 import os
 
 # self defined modules
@@ -46,6 +46,7 @@ class misfit(object):
         """
         Generate emoji observations
         """
+        import h5py
         if not os.path.exists('./data'): os.makedirs('./data')
         if not os.path.exists('./data/DataDynamic_128x30.mat'):
             import requests
@@ -156,10 +157,11 @@ class misfit(object):
         #     obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
         
         def hess(v):
-            if v.shape[0]!=np.prod(self.sz_x):
-                v=v.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
-            obs_v = np.stack([ops_proj[j].dot(v[:,j]) for j in range(self.sz_t)]).T
-            return self.grad(obs=obs_v+np.stack(obs_proj).T)
+            if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
+                v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
+            if v.ndim==2: v=v[:,:,None]
+            Hv = np.stack([ops_proj[j].T.dot(spsla.spsolve(self.nzcov,ops_proj[j].dot(v[:,j,:]))) for j in range(self.sz_t)]).swapaxes(0,1)
+            return Hv.squeeze()
         return hess
     
     # @staticmethod

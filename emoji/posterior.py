@@ -8,7 +8,7 @@ Created January 11, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -116,7 +116,14 @@ class posterior:
         else:
             eigv, eigf=self.eigs()
             if comp<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
-            Ku=multf(eigf*pow(eigv,comp),multf(eigf.T,u))
+            # import time
+            # t_start=time.time()
+            # Ku0=multf(eigf*pow(eigv,comp),multf(eigf.T,u))
+            # print('time: %.4f' % (time.time()-t_start))
+            # t_start=time.time()
+            Ku=np.tensordot(eigf*pow(eigv,comp),np.tensordot(eigf,u,axes=(0,0)),axes=1)
+            # print('time: %.4f' % (time.time()-t_start))
+            # print('error: %.4e' % (abs(Ku-Ku0).max()))
         return Ku
     
     def logdet(self):

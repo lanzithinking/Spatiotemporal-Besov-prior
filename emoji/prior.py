@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.9"
+__version__ = "1.0"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -175,7 +175,8 @@ class prior(STBP):
         else:
             eigv, eigf=self.bsv.eigs()
             if comp<0: eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
-            Cu=(u if self.space=='vec' else eigf.T.dot(u.swapaxes(0,1)) if self.space=='fun' else ValueError('Wrong space!'))*eigv[:,None,None]**(comp)
+            # Cu=(u if self.space=='vec' else eigf.T.dot(u.swapaxes(0,1)) if self.space=='fun' else ValueError('Wrong space!'))*eigv[:,None,None]**(comp)
+            Cu=(u if self.space=='vec' else np.tensordot(eigf,u,axes=(0,0)) if self.space=='fun' else ValueError('Wrong space!'))*eigv[:,None,None]**(comp)
             return Cu.reshape((self.L*self.J,-1),order='F')
     
     # def vec2fun(self, u_vec):
@@ -194,7 +195,8 @@ class prior(STBP):
         if u_vec.shape[0]!=self.L: u_vec=u_vec.reshape((self.L,self.J,-1),order='F')
         if np.ndim(u_vec)==2: u_vec=u_vec[:,:,None]
         _, eigf = self.bsv.eigs()
-        u_f = eigf.dot(u_vec.swapaxes(0,1)).reshape((self.N,-1),order='F')
+        # u_f = eigf.dot(u_vec.swapaxes(0,1)).reshape((self.N,-1),order='F')
+        u_f = np.tensordot(eigf,u_vec,axes=1).reshape((self.N,-1),order='F')
         return np.squeeze(u_f)
     
     # def fun2vec(self, u_f):
@@ -213,7 +215,8 @@ class prior(STBP):
         if u_f.shape[0]!=self.I: u_f=u_f.reshape((self.I,self.J,-1),order='F')
         if np.ndim(u_f)==2: u_f=u_f[:,:,None]
         _, eigf = self.bsv.eigs()
-        u_vec = eigf.T.dot(u_f.swapaxes(0,1)).reshape((self.L*self.J,-1),order='F')
+        # u_vec = eigf.T.dot(u_f.swapaxes(0,1)).reshape((self.L*self.J,-1),order='F')
+        u_vec = np.tensordot(eigf,u_f,axes=(0,0)).reshape((self.L*self.J,-1),order='F')
         return np.squeeze(u_vec)
     
 if __name__ == '__main__':

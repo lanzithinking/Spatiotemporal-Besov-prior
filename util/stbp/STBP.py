@@ -170,7 +170,7 @@ class STBP(BSV):
         """
         Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
         """
-        if X.shape[0]!=self.I: X=X.reshape((self.I,self.J,-1),order='F')
+        if X.shape[:2]!=(self.I,self.J): X=X.reshape((self.I,self.J,-1),order='F')
         if np.ndim(X)<3: X=X[:,:,None]
         if not self.spdapx:
             # logpdf,q_ldet=BSV.logpdf(self.bsv,self.qep.act(X,alpha=-.5,transp=True).reshape((self.I,-1),order='F'),incldet=incldet)
@@ -181,7 +181,7 @@ class STBP(BSV):
             # q_ldet=-X.shape[1]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J if incldet else 0
             # proj_X=eigf.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
             q_ldet=-X.shape[2]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))/self.bsv.q if incldet else 0
-            proj_X=np.tensordot(eigf.T,X,1)/eigv[:,None,None]**(1.0/self.bsv.q) # (L,J,K_)
+            proj_X=np.tensordot(eigf,X,axes=(0,0))/eigv[:,None,None]**(1.0/self.bsv.q) # (L,J,K_)
             proj_X=proj_X.swapaxes(0,1).reshape((self.J,-1),order='F')
             qep_norm=self.qep.logpdf(proj_X,out='norms')
             qsum=-0.5*np.sum(qep_norm**(self.bsv.q/self.qep.q))

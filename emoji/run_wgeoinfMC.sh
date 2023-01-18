@@ -7,7 +7,7 @@
 #SBATCH -p parallel                 # partition 
 #SBATCH -q normal                   # QOS
 
-#SBATCH -t 5-00:00                  # wall time (D-HH:MM)
+#SBATCH -t 2-00:00                  # wall time (D-HH:MM)
 ##SBATCH -A slan7                   # Account hours will be pulled from (commented out with double # in front)
 #SBATCH -o %x.log                   # STDOUT (%j = JobId)
 #SBATCH -e %x.err                   # STDERR (%j = JobId)

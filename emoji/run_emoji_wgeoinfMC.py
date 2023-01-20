@@ -35,7 +35,7 @@ def main(seed=2022):
     parser.add_argument('q', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=2000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(.01,9e-8,9e-8,.01,.01))
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(.01,9e-8,9e-8,1e-2,1e-2)) # 1e-6 for GNH
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
@@ -46,7 +46,7 @@ def main(seed=2022):
     # define emoji Bayesian inverse problem
     spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
-    temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100,'sigma':10}
+    temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     # transformation
@@ -101,21 +101,22 @@ def main(seed=2022):
     # transformed geometry of white noise parameter
     def geomT(parameter=None,geom_ord=[0],**kwargs):
         MF_only=kwargs.pop('MF_only',True)
-        l=None; g=None; invK_=None; Keigs=None;
+        l=None; g=None; H_=None; eigs=None;
         param = T(parameter) if callable(T) else parameter
-        # l,g_,invK_,Keigs = emj.get_geom(param, geom_ord, MF_only=MF_only, adjust_grad=True, store_eig=False, L=100)
+        # l,g_,H_,eigs = emj.get_geom(param, geom_ord, MF_only=MF_only, adjust_grad=True, store_eig=False, L=100)
         if 0 in geom_ord: l=-emj._get_misfit(param)
         if 1 in geom_ord: g=-emj._get_grad(param)
         if 2 in geom_ord:
-            invK_=emj._get_HessApply(param,MF_only=MF_only)
-            g+=invK_(param)
+            H_=emj._get_HessApply(param,MF_only=MF_only)
+            g+=H_(param)
             if not MF_only: g-=param
         if g is not None: g = T(parameter, 1)(g, adj=True)
-        invK = invK_ if invK_ is None else lambda v: T(parameter, 1)(invK_(v), adj=True) + T(parameter, 2)(v, emj._get_grad(param, MF_only=MF_only), adj=True)
-        # emj.posterior = posterior(invK=spsla.LinearOperator((parameter.size,)*2,invK),L=50,store_eig=True)
-        emj.posterior = posterior(invK, N=parameter.size,L=50,store_eig=True)
-        Keigs = emj.posterior.eigs(**kwargs)
-        return l,g,invK,Keigs
+        # H = H_ if H_ is None else lambda v: T(parameter, 1)(H_(v), adj=True) + T(parameter, 2)(v, emj._get_grad(param, MF_only=MF_only), adj=True) # exact Hessian
+        H = H_ if H_ is None else lambda v: T(parameter, 1)(H_(T(parameter, 1)(v)), adj=True) # Gauss-Newton Hessian
+        # emj.posterior = posterior(H=spsla.LinearOperator((parameter.size,)*2,H),L=50,store_eig=True)
+        emj.posterior = posterior(H, N=parameter.size,L=100,store_eig=True)
+        eigs = emj.posterior.eigs(**kwargs)
+        return l,g,H,eigs
     
     # initialization random noise epsilon
     try:
@@ -123,18 +124,18 @@ def main(seed=2022):
         # with open(os.path.join(fld,'MAP.pckl'),'rb') as f:
         #     map=pickle.load(f)
         # f.close()
-        # u=invT(map).flatten(order='F')
+        # z_init=invT(map).flatten(order='F')
         u_init=emj.init_parameter if hasattr(emj,'init_parameter') else emj._init_param(init_opt='LSE',lmda=10)
-        u=invT(u_init).flatten(order='F')
+        z_init=invT(u_init).flatten(order='F')
     except Exception as e:
         print(e)
-        u=np.random.randn({'vec':emj.prior.L*emj.prior.qep.N,'fun':emj.prior.N}[emj.prior.space])
+        z_init=np.random.randn({'vec':emj.prior.L*emj.prior.qep.N,'fun':emj.prior.N}[emj.prior.space])
     
     # run MCMC to generate samples
-    print("Preparing %s sampler with step size %g for %d step(s) usign random seed %d..."
+    print("Preparing %s sampler with step size %g for %d step(s) using random seed %d..."
           % (args.algs[args.alg_NO],args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.seed_NO))
     
-    winfMC=wht_geoinfMC(u_init,emj,args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.algs[args.alg_NO],transformation=T,geomT=geomT, MF_only=False)
+    winfMC=wht_geoinfMC(z_init,emj,args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.algs[args.alg_NO],transformation=T,geomT=geomT, MF_only=False)
     res=winfMC.sample(args.num_samp,args.num_burnin,return_result=True)
     
     # samp=[]; loglik=[]; times=[]

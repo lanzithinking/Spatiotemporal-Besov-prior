@@ -11,7 +11,7 @@ https://arxiv.org/abs/1803.03344
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -78,9 +78,12 @@ class wht_geoinfMC:
         """
         sample v ~ N(0,I) or N(0,invK(q))
         """
-        v = np.random.randn(self.dim)
+        # v = np.random.randn(self.dim)
         if hasattr(self.model, 'posterior'):
-            v = self.model.posterior.K_act(v, 0.5)
+            # v = self.model.posterior.K_act(v, 0.5)
+            v = self.model.posterior.sample()
+        else:
+            v = np.random.randn(self.dim)
         return v
         
     def wpCN(self):
@@ -237,7 +240,7 @@ class wht_geoinfMC:
         v+=rth/2*ng
 
         # current energy
-        E_cur = -self.ll - rth/2*self.g.dot(v) + self.h/8*self.g.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) -0.5*sum(np.log(1+self.eigs[0]))
+        E_cur = -self.ll - rth/2*self.g.dot(v) + self.h/8*self.g.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(self.eigs[0])
         # generate proposal according to simplified manifold Langevin dynamics
         u = ((1-self.h/4)*self.u + rth*v)/(1+self.h/4)
 
@@ -251,7 +254,7 @@ class wht_geoinfMC:
         ng=self.model.posterior.K_act(g)
 
         # new energy
-        E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) -0.5*sum(np.log(1+eigs[0]))
+        E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(eigs[0])
 
         # Metropolis test
         logr=-E_prp+E_cur
@@ -286,7 +289,7 @@ class wht_geoinfMC:
         pw = rth/2*v.dot(ng)
 
         # current energy
-        E_cur = -self.ll + self.h/8*ng.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
+        E_cur = -self.ll + self.h/8*ng.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(self.eigs[0])
 
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -315,7 +318,7 @@ class wht_geoinfMC:
         pw += rth/2*v.dot(ng)
 
         # new energy
-        E_prp = -ll + self.h/8*ng.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) -0.5*sum(np.log(1+eigs[0]))
+        E_prp = -ll + self.h/8*ng.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(eigs[0])
 
         # Metropolis test
         logr=-E_prp+E_cur-pw

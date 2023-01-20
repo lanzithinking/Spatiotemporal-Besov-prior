@@ -142,6 +142,7 @@ class emoji:
         k=kwargs.pop('k',int(self.prior.L/2))
         maxiter=kwargs.pop('maxiter',100)
         tol=kwargs.pop('tol',1e-10)
+        HessApply = self._get_HessApply(parameter, MF_only=True)
         H_op = spsla.LinearOperator((parameter.size,)*2,HessApply)
         eigs = spsla.eigsh(H_op,min(k,H_op.shape[0]-1),maxiter=maxiter,tol=tol)
         return eigs

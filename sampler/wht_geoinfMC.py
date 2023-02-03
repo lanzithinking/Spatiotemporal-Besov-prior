@@ -240,7 +240,7 @@ class wht_geoinfMC:
         v+=rth/2*ng
 
         # current energy
-        E_cur = -self.ll - rth/2*self.g.dot(v) + self.h/8*self.g.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(self.eigs[0])
+        E_cur = -self.ll - rth/2*self.g.dot(v) + self.h/8*self.g.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(self.eigs[0])
         # generate proposal according to simplified manifold Langevin dynamics
         u = ((1-self.h/4)*self.u + rth*v)/(1+self.h/4)
 
@@ -254,7 +254,7 @@ class wht_geoinfMC:
         ng=self.model.posterior.K_act(g)
 
         # new energy
-        E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(eigs[0])
+        E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(eigs[0])
 
         # Metropolis test
         logr=-E_prp+E_cur
@@ -289,7 +289,7 @@ class wht_geoinfMC:
         pw = rth/2*v.dot(ng)
 
         # current energy
-        E_cur = -self.ll + self.h/8*ng.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(self.eigs[0])
+        E_cur = -self.ll + self.h/8*ng.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(self.eigs[0])
 
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -318,7 +318,7 @@ class wht_geoinfMC:
         pw += rth/2*v.dot(ng)
 
         # new energy
-        E_prp = -ll + self.h/8*ng.dot(ng) +0.5*(self.model.posterior.K_act(v,-1).dot(v)- v.dot(v)) +0.5*self.model.posterior.logdet(eigs[0])
+        E_prp = -ll + self.h/8*ng.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(eigs[0])
 
         # Metropolis test
         logr=-E_prp+E_cur-pw

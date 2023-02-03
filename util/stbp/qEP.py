@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -67,6 +67,7 @@ class qEP:
         self.q=self.parameters.get('q',1) # norm power
         self.jit=self.parameters.get('jit',1e-6) # jitter
         self.N,self.d=self.x.shape # size and dimension
+        self.sigma2*=self.N**(1-2/self.q) # scale the covariance
         if L is None:
             L=min(self.N,100)
         self.L=L # truncation in Karhunen-Loeve expansion
@@ -348,7 +349,7 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t3-t2))
     
-    qep2=qep; qep2.q=2; qep2=qep2.update(l=qep.l)
+    qep2=qep; qep2.q=1; qep2=qep2.update(l=qep.l)
     u=qep2.rnd()
     v=qep2.rnd()
     h=1e-5

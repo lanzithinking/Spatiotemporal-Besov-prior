@@ -8,7 +8,7 @@ Created July 5, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -20,7 +20,8 @@ import os
 # self defined modules
 from prior import *
 from misfit import *
-from posterior import *
+from posterior_lr import *
+from whiten import *
 
 # set to warn only once for the same warnings
 import warnings
@@ -47,6 +48,7 @@ class emoji:
         print('\nLikelihood model is obtained.')
         # set prior
         self.prior = prior(sz_x=self.misfit.sz_x,sz_t=self.misfit.sz_t,**kwargs)
+        self.whiten = whiten(self.prior)
         print('\nPrior model is specified.')
         # set low-rank approximate Gaussian posterior
         # self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
@@ -103,35 +105,55 @@ class emoji:
         if parameter is None:
             parameter=self.prior.mean
         loglik=None; agrad=None; HessApply=None; eigs=None;
+        # optional arguments
+        whitened=kwargs.pop('whitened',False)
+        MF_only=kwargs.pop('MF_only',True)
         
-        # # convert parameter vector to function
-        # parameter = self.prior.vec2fun(parameter)
+        # un-whiten if necessary
+        param = self.whiten.wn2stbp(parameter) if whitened else parameter
         
         # get log-likelihood
         if any(s>=0 for s in geom_ord):
-            loglik = -self._get_misfit(parameter, kwargs.get('MF_only',True))
+            loglik = -self._get_misfit(param)
         
         # get gradient
         if any(s>=1 for s in geom_ord):
-            agrad = -self._get_grad(parameter, kwargs.get('MF_only',True))
+            agrad = -self._get_grad(param)
+            if whitened: agrad = self.whiten.wn2stbp(parameter,1)(agrad, adj=True)
         
         # get Hessian Apply
         if any(s>=1.5 for s in geom_ord):
-            HessApply = self._get_HessApply(parameter, kwargs.get('MF_only',True)) # Hmisfit if MF is true
-            # if np.max(geom_ord)<=1.5:
-            #     # adjust the gradient
-            #     agrad += HessApply(parameter)
-            #     if not kwargs.get('MF_only',False): agrad -= parameter
-        
-        # get estimated eigen-decomposition for the Hessian (or Gauss-Newton)
-        if any(s>1.5 for s in geom_ord):
-            # eigs = self.get_eigs(parameter, **kwargs) # eigen-pairs of HessApply
-            self.posterior = posterior(invK=spsla.LinearOperator((parameter.size,)*2,HessApply),**kwargs)
-            # eigs = self.posterior.eigs(**kwargs) # eigen-pairs of K
-            if kwargs.pop('adjust_grad',False):
+            HessApply_ = self._get_HessApply(param, MF_only=MF_only) # Hmisfit if MF is true
+            Hess0_,invHess0_=self.prior.Hess(param),self.prior.invHess(param)
+            if whitened:
+                HessApply = lambda v: self.whiten.wn2stbp(parameter,1)(HessApply_(self.whiten.wn2stbp(parameter,1)(v)), adj=True) \
+                            # + self.whiten.wn2stbp(parameter, 2)(v, self._get_grad(param, MF_only=MF_only), adj=True) # exact Hessian
+                Hess0 = lambda v: self.whiten.wn2stbp(parameter, 1)(Hess0_(self.whiten.wn2stbp(parameter, 1)(v)), adj=True) \
+                            # + self.whiten.wn2stbp(parameter, 2)(v, self.prior.grad(param), adj=True)
+                invHess0 = lambda v: self.whiten.stbp2wn(param, 1)(invHess0_(self.whiten.stbp2wn(param, 1)(v, adj=True))) #+ ? self.whiten.stbp2wn(parameter, 2)(v, self.prior.grad(param)) 
+            else:
+                HessApply,Hess0,invHess0 = HessApply_,Hess0_,invHess0_
+            # v=np.random.randn(self.prior.L*self.prior.J)
+            # v1=invHess0(Hess0(v))
+            # print('Relative difference of invHessian-Hessian-action in a random direction between the composition and identity: %.10f' % (np.linalg.norm(v1-v)/np.linalg.norm(v)))
+            # v2=Hess0(invHess0(v))
+            # print('Relative difference of Hessian-invHessian-action in a random direction between the composition and identity: %.10f' % (np.linalg.norm(v2-v)/np.linalg.norm(v)))
+            if np.max(geom_ord)<=1.5:
                 # adjust the gradient
                 agrad += HessApply(parameter)
-                if not kwargs.get('MF_only',False): agrad -= parameter
+                if not MF_only: agrad -= Hess0(parameter)
+        
+        # get estimated eigen-decomposition for the Hessian (or Gauss-Newton)
+        if any(s>1 for s in geom_ord):
+            if MF_only:
+                self.posterior = posterior(HessApply, Hess0, invHess0, N=parameter.size, L=100, store_eig=True)
+            else:
+                self.posterior = posterior(HessApply, N=parameter.size, L=100, store_eig=True)
+            eigs = self.posterior.eigs(**kwargs)
+            if any(s>1.5 for s in geom_ord):
+                # adjust the gradient
+                agrad += self.posterior.K_act(parameter, -1)
+                if not MF_only: agrad -= Hess0(parameter)
         
         return loglik,agrad,HessApply,eigs
     
@@ -142,7 +164,7 @@ class emoji:
         k=kwargs.pop('k',int(self.prior.L/2))
         maxiter=kwargs.pop('maxiter',100)
         tol=kwargs.pop('tol',1e-10)
-        HessApply = self._get_HessApply(parameter, MF_only=True)
+        HessApply = self._get_HessApply(parameter, kwargs.pop('MF_only',True)) # Hmisfit if MF is true
         H_op = spsla.LinearOperator((parameter.size,)*2,HessApply)
         eigs = spsla.eigsh(H_op,min(k,H_op.shape[0]-1),maxiter=maxiter,tol=tol)
         return eigs
@@ -223,7 +245,10 @@ class emoji:
         # obtain the geometric quantities
         print('\n\nObtaining geometric quantities by direct calculation...')
         start = time.time()
-        loglik,grad,HessApply,_ = self.get_geom(parameter,geom_ord=[0,1,1.5],MF_only=MF_only)
+        # loglik,grad,HessApply,_ = self.get_geom(parameter,geom_ord=[0,1,1.5],MF_only=MF_only)
+        loglik = -self._get_misfit(parameter,MF_only=MF_only)
+        grad = -self._get_grad(parameter,MF_only=MF_only)
+        HessApply = self._get_HessApply(parameter,MF_only=MF_only)
         end = time.time()
         print('Time used is %.4f' % (end-start))
         
@@ -239,7 +264,7 @@ class emoji:
 #         parameter_m = parameter - h*v
 #         loglik_m = -self._get_misfit(parameter_m,MF_only=MF_only)
         dloglikv_fd = (loglik_p-loglik)/h
-        dloglikv = grad.dot(v.flatten())
+        dloglikv = grad.dot(v)
         rdiff_gradv = np.abs(dloglikv_fd-dloglikv)/np.linalg.norm(v)
         print('Relative difference of gradients in a random direction between direct calculation and finite difference: %.10f' % rdiff_gradv)
         ## Hessian
@@ -262,7 +287,7 @@ if __name__ == '__main__':
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
     # test
-    emj.test(1e-8, MF_only=False)
+    emj.test(1e-6, MF_only=False)
     # obtain MAP
     map_v = emj.get_MAP(SAVE=True, NCG=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )

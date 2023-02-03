@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "1.0"
+__version__ = "1.1"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -125,6 +125,30 @@ class prior(STBP):
             return Hv.squeeze()
         return hess
     
+    def invHess(self,u):
+        """
+        Calculate the inverse Hessian action of log-prior
+        """
+        u_sz={'vec':self.L*self.J,'fun':self.N}[self.space]
+        if u.shape[0]!=u_sz:
+            u=u.reshape((u_sz,-1),order='F')
+        if self.mean is not None:
+            u-=self.mean
+        
+        proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
+        qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
+        
+        def ihess(v): # does not exist if q=1 (taking (q/2|xi|**(q-2))**(-1)C^(-1) )
+            if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
+            v=v.reshape((self.L,self.J,-1),order='F').swapaxes(0,1) # (J,L,K)
+            iHv=-(self.bsv.q-2)*(0 if self.bsv.q==1 else (qep_norm[None,:,None]**2 + (self.bsv.q-2)*np.sum(proj_u*self.qep.solve(proj_u),axis=0)[None,:,None] )**(-1) )*proj_u[:,:,None]*np.sum(proj_u[:,:,None]*(v*self.gamma[None,:,None]),axis=0,keepdims=True)*self.gamma[None,:,None]
+            iHv+=self.qep.mult(v*self.gamma[None,:,None])*self.gamma[None,:,None]
+            iHv/=0.5*self.bsv.q*qep_norm[None,:,None]**(self.bsv.q-2)
+            iHv=iHv.swapaxes(0,1) # (L,J,K)
+            iHv=iHv.reshape((u_sz,-1),order='F') if self.space=='vec' else self.vec2fun(iHv) if self.space=='fun' else ValueError('Wrong space!')
+            return iHv.squeeze()
+        return ihess
+    
     def sample(self, output_space=None, mean=None):
         """
         Sample a random function u ~ STBP(0,_C)
@@ -223,8 +247,8 @@ if __name__ == '__main__':
     np.random.seed(2022)
     # define the prior
     sz_x=128; sz_t=20
-    spat_args={'basis_opt':'Fourier','sigma2':1,'l':1,'s':1.5,'q':1.0,'L':1000}
-    temp_args={'ker_opt':'matern','l':.5,'q':2.0,'L':100}
+    spat_args={'basis_opt':'Fourier','sigma2':1,'l':1,'s':1.5,'q':1.01,'L':1000}
+    temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='vec')
     # generate sample
     u=prior.sample()
@@ -244,6 +268,13 @@ if __name__ == '__main__':
     hessv=hess(v)
     rdiff_hessv=np.linalg.norm(hessv_fd-hessv)/np.linalg.norm(v)
     print('Relative difference of Hessian-action in a random direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
+    ihess=prior.invHess(u)
+    v1=ihess(hessv)
+    rdiff_v1=np.linalg.norm(v1-v)/np.linalg.norm(v)
+    print('Relative difference of invHessian-Hessian-action in a random direction between the composition and identity: %.10f' % rdiff_v1)
+    v2=hess(ihess(v))
+    rdiff_v2=np.linalg.norm(v2-v)/np.linalg.norm(v)
+    print('Relative difference of Hessian-invHessian-action in a random direction between the composition and identity: %.10f' % rdiff_v2)
     # plot
     import matplotlib.pyplot as plt
     if u.shape[0]!=prior.N: u=prior.vec2fun(u)

@@ -196,7 +196,8 @@ def _geigen_randproj(Omega,Y_bar,Y,B,srt_ord='asc'):
     """
     #-------- begin pre-CholQR(Y,B) -------#
     Z,_=np.linalg.qr(Y)
-    BZ=B.dot(Z) #if type(B) is np.ndarray else np.array([B(r) for r in Z.T]).T
+    # BZ=B.dot(Z) #if type(B) is np.ndarray else np.array([B(r) for r in Z.T]).T
+    BZ=B(Z)
     R=np.linalg.cholesky(Z.T.dot(BZ))
     Q=np.linalg.solve(R,Z.T).T
     #-------- end pre-CholQR(Y,B) -------#

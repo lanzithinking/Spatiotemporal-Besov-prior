@@ -34,7 +34,7 @@ def main(seed=2022):
     parser.add_argument('q', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=2000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-4,1e-4,1e-4,1e-3,1e-3)) # 1e-6 for GNH
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-4,1e-4,1e-4,1e-3,1e-3))
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
@@ -45,7 +45,7 @@ def main(seed=2022):
     # define emoji Bayesian inverse problem
     spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.01,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
-    temp_args={'ker_opt':'matern','l':.5,'s':1.5,'q':1.0,'L':100}
+    temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     
@@ -72,7 +72,7 @@ def main(seed=2022):
     print("Preparing %s sampler with step size %g for %d step(s) using random seed %d..."
           % (args.algs[args.alg_NO],args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.seed_NO))
     
-    winfMC=wht_geoinfMC(z_init,emj,args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.algs[args.alg_NO],transformation=emj.whiten.wn2stbp, MF_only=True, whitened=True)
+    winfMC=wht_geoinfMC(z_init,emj,args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.algs[args.alg_NO],transformation=emj.whiten.wn2stbp, MF_only=True, whitened=True, k=100)
     res=winfMC.sample(args.num_samp,args.num_burnin,return_result=True)
     
     # samp=[]; loglik=[]; times=[]

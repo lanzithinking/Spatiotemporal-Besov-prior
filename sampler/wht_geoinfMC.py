@@ -400,7 +400,7 @@ class wht_geoinfMC:
             while True:
                 try:
                     acpt_idx,logr=sampler()
-                except RuntimeError as e:
+                except Exception as e:
                     print(e)
 #                     import pydevd; pydevd.settrace()
 #                     import traceback; traceback.print_exc()

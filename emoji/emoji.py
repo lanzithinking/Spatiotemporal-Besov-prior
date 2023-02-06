@@ -146,9 +146,9 @@ class emoji:
         # get estimated eigen-decomposition for the Hessian (or Gauss-Newton)
         if any(s>1 for s in geom_ord):
             if MF_only:
-                self.posterior = posterior(HessApply, Hess0, invHess0, N=parameter.size, L=100, store_eig=True)
+                self.posterior = posterior(HessApply, Hess0, invHess0, N=parameter.size, store_eig=True, **kwargs)
             else:
-                self.posterior = posterior(HessApply, N=parameter.size, L=100, store_eig=True)
+                self.posterior = posterior(HessApply, N=parameter.size, store_eig=True, **kwargs)
             eigs = self.posterior.eigs(**kwargs)
             if any(s>1.5 for s in geom_ord):
                 # adjust the gradient

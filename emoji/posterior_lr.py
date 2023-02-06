@@ -31,18 +31,12 @@ class posterior:
     """
     Gaussian approximation of the posterior measure
     """
-    def __init__(self,H,H0=None,invH0=None,N=None,L=None,store_eig=False,**kwargs):
+    def __init__(self,H,H0=None,invH0=None,N=None,store_eig=False,**kwargs):
         self.H = H
         self.H0 = H0
         self.invH0 = invH0
         self.geig = self.H0 is not None and self.invH0 is not None
         self.N = N if N is not None else self.H.shape[0]
-        if L is None:
-            L=min(self.N,100)
-        self.L=L # truncation in Karhunen-Loeve expansion
-        if self.L>self.N:
-            warnings.warn("Karhunen-Loeve truncation number cannot exceed size of the discrete basis!")
-            self.L=self.N
         self.spdapx=kwargs.get('spdapx',self.N>1e3)
         self.store_eig=store_eig
         if self.store_eig:
@@ -62,14 +56,13 @@ class posterior:
         # return self.H.dot(v)
         return self.H(v)+self.H0(v) if self.geig else self.H(v)
     
-    def eigs(self,L=None,upd=False,**kwargs):
+    def eigs(self,upd=False,**kwargs):
         """
         Obtain partial eigen-basis of H: H * eigf_i = eigf_i * eigv_i, i=1,...,L
         or generalized eigen-basis of pencil (H, H0): H=H0* eigF *eigV *eigF^(-1) such that eigF' *H0 *eigF = I
         """
-        if L is None:
-            L=self.L;
-        if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
+        if upd or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
+            k=kwargs.pop('k',100)
             # import time
             if not self.spdapx:
                 maxiter=kwargs.pop('maxiter',100)
@@ -79,7 +72,7 @@ class posterior:
                     H_op=self.H if isinstance(self.H,spsla.LinearOperator) else spsla.LinearOperator((self.N,)*2,self.H)
                     H0_op=self.H0 if self.H0 is None or isinstance(self.H0,spsla.LinearOperator) else spsla.LinearOperator((self.N,)*2,self.H0)
                     invH0_op=self.invH0 if self.invH0 is None or isinstance(self.invH0,spsla.LinearOperator) else spsla.LinearOperator((self.N,)*2,self.invH0)
-                    eigv,eigf=spsla.eigs(H_op,k=min(L,self.N-1),which='LM' if self.geig else 'SM',M=H0_op,Minv=invH0_op,maxiter=maxiter,tol=tol)#,which='SM')
+                    eigv,eigf=spsla.eigs(H_op,k=min(k,self.N-1),which='LM' if self.geig else 'SM',M=H0_op,Minv=invH0_op,maxiter=maxiter,tol=tol)#,which='SM')
                     # end = time.time()
                     # print('Time used is %.4f' % (end-start))
                 except Exception as divg:
@@ -87,20 +80,21 @@ class posterior:
                     eigv,eigf=divg.eigenvalues,divg.eigenvectors
                 eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
                 # eigv=pow(abs(eigv),-1); #eigf=eigf[:,::-1]
-                eigv=np.pad(eigv,(0,L-len(eigv)),mode='constant'); eigf=np.pad(eigf,[(0,0),(0,L-eigf.shape[1])],mode='constant')
+                # eigv=np.pad(eigv,(0,k-len(eigv)),mode='constant'); eigf=np.pad(eigf,[(0,0),(0,L-eigf.shape[1])],mode='constant')
             else:
+                p=kwargs.pop('p',10)
                 # start = time.time()
                 if not self.geig:
-                    eigv,eigf=eigen_RA(self.H,dim=self.N,k=L,which='SM')
+                    eigv,eigf=eigen_RA(self.H,dim=self.N,which='SM',k=k,p=p)
                     # eigv=pow(eigv,-1); #eigf=eigf[:,::-1]
                 else:
-                    eigv,eigf=geigen_RA(self.H,self.H0,self.invH0,dim=self.N,k=L)
+                    eigv,eigf=geigen_RA(self.H,self.H0,self.invH0,dim=self.N,k=k,p=p)
                 # end = time.time()
                 # print('Time used is %.4f' % (end-start))
                 eigv[abs(eigv)<np.finfo(float).eps]=np.finfo(float).eps
         else:
             eigv,eigf=self.eigv,self.eigf
-            eigv=eigv[:L]; eigf=eigf[:,:L]
+            # eigv=eigv[:L]; eigf=eigf[:,:L]
         return eigv,eigf
     
     def sample(self, mean=None):

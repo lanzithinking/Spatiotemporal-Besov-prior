@@ -8,7 +8,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.7"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -35,10 +35,11 @@ class misfit(object):
         """
         Initialize data-misfit class with information of observations.
         """
-        self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
-        # self.jit = kwargs.pop('jit',1e-3) # jitter to the noise covariance
         # get observations
+        self.data_set = kwargs.pop('data_set','30proj') # data set
+        self.data_thinning = kwargs.pop('data_thinning',3) # data thinning
         self.obs, nzcov, self.sz_x, self.sz_t = self.get_obs(**kwargs)
+        self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
         # self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
         self.nzcov = self.nzlvl * max(np.diag(nzcov)) * ( sps.eye(nzcov.shape[0], format='csr'))
     
@@ -46,38 +47,38 @@ class misfit(object):
         """
         Generate emoji observations
         """
+        dat_name='DataDynamic_128x'+self.data_set[:2]
         import h5py
         if not os.path.exists('./data'): os.makedirs('./data')
-        if not os.path.exists('./data/DataDynamic_128x30.mat'):
+        if not os.path.exists('./data/'+dat_name+'.mat'):
             import requests
             print("downloading...")
-            r = requests.get('https://zenodo.org/record/1183532/files/DataDynamic_128x30.mat')
-            with open('./data/DataDynamic_128x30.mat', "wb") as file:
+            r = requests.get('https://zenodo.org/record/1183532/files/'+dat_name+'.mat')
+            with open('./data/'+dat_name+'.mat', "wb") as file:
                 file.write(r.content)
             print("Emoji data downloaded.")
-        with h5py.File('./data/DataDynamic_128x30.mat', 'r') as f:
+        with h5py.File('./data/'+dat_name+'.mat', 'r') as f:
             A = sps.csc_matrix((f["A"]["data"], f["A"]["ir"], f["A"]["jc"]))
             normA = np.array(f['normA'])
             sinogram = np.array(f['sinogram']).T
         T = 33
-        N = np.sqrt(A.shape[1] / T)
-        [mm, nn] = sinogram.shape
-        ind = []
-        for ii in range(int(nn /3)): # every 3 of 30 angles for 33 seconds
-            ind.extend( np.arange(0,mm) + (3*ii)*mm )
-        m2 = sinogram[:, ::3]
-        A_small = A[ind, :]
-        b = m2
+        N = int(A.shape[1] / T)
         nt = int(T)
-        nx = int(N)
-        ny = int(N)
+        nx,ny = (int(np.sqrt(N)),)*2
+        [mm, nn] = sinogram.shape # (217, #proj*33 seconds)
+        every_x = self.data_thinning
+        ind = []
+        for ii in range(int(nn /every_x)): # every_x of 30/60 angles for 33 seconds
+            ind.extend( np.arange(0,mm) + (every_x*ii)*mm )
+        A_small = A[ind, :]
+        b = sinogram[:, ::every_x]
         b = b.reshape(-1, 1, order='F').squeeze()
         AA = list(range(T))
         B = list(range(T))
         delta = 0 # no added noise for this dataset
         for ii in range(T):
-            AA[ii] = A_small[ 2170*(ii):2170*(ii+1), 16384*ii:16384*(ii+1) ] # 217 projections of size 128x128 at each of 10 selected angles
-            B[ii] = b[ 2170*(ii) : 2170*(ii+1) ]
+            AA[ii] = A_small[ mm*int(nn/every_x/T)*(ii):mm*int(nn/every_x/T)*(ii+1), N*ii:N*(ii+1) ] # 217 projections of size 128x128 at each of the selected angles
+            B[ii] = b[ mm*int(nn/every_x/T)*(ii) : mm*int(nn/every_x/T)*(ii+1) ]
         return A_small, b, AA, B, nx, ny, nt, delta
     
     def observe(self):
@@ -96,7 +97,7 @@ class misfit(object):
         Get observations
         """
         obs_file_loc=kwargs.pop('obs_file_loc',os.getcwd())
-        obs_file_name='emoji_obs'
+        obs_file_name='emoji_obs_'+self.data_set+('_thinning'+str(self.data_thinning) if self.data_thinning>1 else '')
         try:
             loaded=np.load(os.path.join(obs_file_loc,obs_file_name+'.npz'),allow_pickle=True)
             obs=loaded['obs']; nzcov=loaded['nzcov']; sz_x=loaded['sz_x']; sz_t=loaded['sz_t']
@@ -239,7 +240,8 @@ if __name__ == '__main__':
     from prior import *
     
     # define the misfit
-    msft = misfit()
+    data_set='60proj'
+    msft = misfit(data_set=data_set)
     # define the prior
     pri = prior(sz_x=msft.sz_x,sz_t=msft.sz_t)
     

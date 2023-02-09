@@ -7,7 +7,7 @@ Created February 1, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -100,6 +100,18 @@ class whiten:
         if dord==1:
             return lambda v,adj=False: self.prior.C_act(self.qep2wn(self.prior.C_act(u, -1/q), dord)(v, adj=adj), -1/q).squeeze() #if adj else self.prior.C_act(self.qep2wn(self.prior.C_act(u, -1/q), dord)(v), -1/q).squeeze()
     
+    def jacdet(self,z,dord=0,q=None):
+        """
+        (log) Jacobian determinant log dT = log dLmd + C
+        """
+        if q is None: q = self.prior.qep.q
+        _z = z.reshape((self.prior.L,self.prior.J,-1),order='F') # (L,J,_)
+        nm_z = np.linalg.norm(_z,axis=1,keepdims=True)
+        if dord==0:
+            return (2/q-1)*self.prior.J*np.log(nm_z).sum()
+        if dord==1:
+            return (2/q-1)*self.prior.J*(_z/nm_z**2).reshape(z.shape,order='F')
+    
 if __name__ == '__main__':
     from emoji import emoji
     
@@ -160,3 +172,10 @@ if __name__ == '__main__':
     print('Relative error of dT-dinvT in a random direction between composition and identity: %.10f' % (np.linalg.norm(v1-v)/np.linalg.norm(v)))
     v2=wht.stbp2wn(u,1)(wht.wn2stbp(val,1)(v))
     print('Relative error of dinvT-dT in a random direction between composition and identity: %.10f' % (np.linalg.norm(v2-v)/np.linalg.norm(v)))
+    
+    h=1e-8; z, v=np.random.randn(2,emj.prior.L*emj.prior.J)
+    # jacdet
+    print('\n**** Testing jacdet ****')
+    val,grad=wht.jacdet(z,0),wht.jacdet(z,1)
+    val1=wht.jacdet(z+h*v,0)
+    print('error in gradient of Jacobian determinant: %0.8f' %(np.linalg.norm((val1-val)/h-grad.dot(v))/np.linalg.norm(v)))

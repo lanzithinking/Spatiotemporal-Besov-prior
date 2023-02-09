@@ -29,12 +29,12 @@ warnings.filterwarnings(action="once")
 def main(seed=2022):
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('alg_NO', nargs='?', type=int, default=3)
+    parser.add_argument('alg_NO', nargs='?', type=int, default=0)
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
-    parser.add_argument('num_samp', nargs='?', type=int, default=2000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-4,1e-4,1e-4,1e-3,1e-3))
+    parser.add_argument('num_samp', nargs='?', type=int, default=5000)
+    parser.add_argument('num_burnin', nargs='?', type=int, default=2000)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-7,1e-5,1e-5,1e-3,1e-3))
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
@@ -43,11 +43,13 @@ def main(seed=2022):
     np.random.seed(args.seed_NO)
     
     # define emoji Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.01,'L':2000}
+    data_args={'data_set':'60proj','data_thinning':2}
+    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
+    # temp_args={'ker_opt':'powexp','l':.5,'s':2,'q':1.0,'L':100}
     temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
     store_eig = True
-    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
+    emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     
     # initialization random noise epsilon
     try:
@@ -56,7 +58,7 @@ def main(seed=2022):
         #     map=pickle.load(f)
         # f.close()
         # z_init=emj.whiten.stbp2wn(map).flatten(order='F')
-        u_init=emj.init_parameter if hasattr(emj,'init_parameter') else emj._init_param()#init_opt='LSE',lmda=10)
+        u_init=emj.init_parameter if hasattr(emj,'init_parameter') else emj._init_param(init_opt='LSE',lmda=10)
         z_init=emj.whiten.stbp2wn(u_init).flatten(order='F')
     except Exception as e:
         print(e)
@@ -73,7 +75,7 @@ def main(seed=2022):
           % (args.algs[args.alg_NO],args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.seed_NO))
     
     winfMC=wht_geoinfMC(z_init,emj,args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.algs[args.alg_NO],transformation=emj.whiten.wn2stbp, MF_only=True, whitened=True, k=100)
-    res=winfMC.sample(args.num_samp,args.num_burnin,return_result=True)
+    res=winfMC.sample(args.num_samp,args.num_burnin,return_result=True)#, save_result=False)
     
     # samp=[]; loglik=[]; times=[]
     # accp=0; acpt=0
@@ -122,15 +124,13 @@ def main(seed=2022):
     # samp=loaded['samp']
     samp=res[3]
     
-    mcmc_v_med = np.median(samp,axis=0)
-    mcmc_v_mean = np.mean(samp,axis=0)
-    mcmc_v_std = np.std(samp,axis=0)
-    mcmc_f = emj.prior.vec2fun(mcmc_v_med).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
-    mcmc_f = emj.prior.vec2fun(mcmc_v_mean).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
-    mcmc_f = emj.prior.vec2fun(mcmc_v_std).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
+    if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
+    med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
+    emj.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
+    emj.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
 
 if __name__ == '__main__':
     main()

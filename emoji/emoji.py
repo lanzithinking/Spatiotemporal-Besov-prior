@@ -8,7 +8,7 @@ Created July 5, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -115,11 +115,12 @@ class emoji:
         # get log-likelihood
         if any(s>=0 for s in geom_ord):
             loglik = -self._get_misfit(param)
+            if whitened: loglik += self.whiten.jacdet(parameter)
         
         # get gradient
         if any(s>=1 for s in geom_ord):
             agrad = -self._get_grad(param)
-            if whitened: agrad = self.whiten.wn2stbp(parameter,1)(agrad, adj=True)
+            if whitened: agrad = self.whiten.wn2stbp(parameter,1)(agrad, adj=True) + self.whiten.jacdet(parameter, 1)
         
         # get Hessian Apply
         if any(s>=1.5 for s in geom_ord):

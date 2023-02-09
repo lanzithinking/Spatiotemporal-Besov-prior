@@ -35,11 +35,12 @@ def main(seed=2022):
     np.random.seed(args.seed_NO)
     
     # define emoji Bayesian inverse problem
+    data_args={'data_set':'60proj','data_thinning':2}
     spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
+    emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
     logLik = lambda u: -emj._get_misfit(u, MF_only=True)
     rnd_pri = emj.prior.sample
     
@@ -95,15 +96,13 @@ def main(seed=2022):
     # loaded=np.load(os.path.join(savepath,filename+'.npz'))
     # samp=loaded['samp']
     
-    mcmc_v_med = np.median(samp,axis=0)
-    mcmc_v_mean = np.mean(samp,axis=0)
-    mcmc_v_std = np.std(samp,axis=0)
-    mcmc_f = emj.prior.vec2fun(mcmc_v_med).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/ESS_median')
-    mcmc_f = emj.prior.vec2fun(mcmc_v_mean).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/ESS_mean')
-    mcmc_f = emj.prior.vec2fun(mcmc_v_std).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=mcmc_f, save_imgs=True, save_path='./reconstruction/ESS_std')
+    if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
+    med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
+    emj.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
+    emj.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
 
 if __name__ == '__main__':
     main()

@@ -35,11 +35,12 @@ def main(seed=2022):
     np.random.seed(seed)
     
     # define emoji Bayesian inverse problem
+    data_args={'data_set':'60proj','data_thinning':2}
     spat_args={'basis_opt':args.bass[args.bas_NO],'l':1,'s':1,'q':args.q,'L':2000}
     if spat_args['basis_opt']=='wavelet': spat_args['wvlet_typ']=args.wavs[args.wav_NO]
     temp_args={'ker_opt':args.kers[args.ker_NO],'l':.5,'q':1.0,'L':100}
     store_eig = True
-    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
+    emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     # truth = emj.misfit.truth # no truth
     
     # optimize to get MAP

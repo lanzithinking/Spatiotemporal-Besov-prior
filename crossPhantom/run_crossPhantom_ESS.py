@@ -100,9 +100,9 @@ def main(seed=2022):
     med_f = np.median(samp,axis=0).reshape(np.append(xph.misfit.sz_x,xph.misfit.sz_t),order='F').swapaxes(0,1)
     mean_f = np.mean(samp,axis=0).reshape(np.append(xph.misfit.sz_x,xph.misfit.sz_t),order='F').swapaxes(0,1)
     std_f = np.std(samp,axis=0).reshape(np.append(xph.misfit.sz_x,xph.misfit.sz_t),order='F').swapaxes(0,1)
-    xph.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
-    xph.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
-    xph.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
+    xph.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/ESS_median')
+    xph.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path='./reconstruction/ESS_mean')
+    xph.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path='./reconstruction/ESS_std')
 
 if __name__ == '__main__':
     main()

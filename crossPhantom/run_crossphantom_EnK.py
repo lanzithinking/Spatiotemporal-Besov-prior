@@ -1,5 +1,5 @@
 """
-Main function to run ensemble Kalman (EnK) algorithms for the dynamic linear inverse problem of emoji.
+Main function to run ensemble Kalman (EnK) algorithms for the dynamic linear inverse problem of crossPhantom.
 Shiwei Lan @ ASU, 2022
 """
  

@@ -34,14 +34,14 @@ def main(seed=2022):
     # set random seed
     np.random.seed(seed)
     
-    # define emoji Bayesian inverse problem
+    # define STEMPO Bayesian inverse problem
+    data_args={'data_set':'simulation'}
     spat_args={'basis_opt':args.bass[args.bas_NO],'l':1,'s':1,'q':args.q,'L':2000}
     if spat_args['basis_opt']=='wavelet': spat_args['wvlet_typ']=args.wavs[args.wav_NO]
     temp_args={'ker_opt':args.kers[args.ker_NO],'l':.5,'q':1.0,'L':100}
     store_eig = True
-    data_src='simulation'
-    stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed)#, init_param=True)
-    if stpo.misfit.data_src=='simulation':
+    stpo = STEMPO(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
+    if stpo.misfit.data_set=='simulation':
         truth = stpo.misfit.truth
     # transformation
     nmlz = lambda z,q=1: z/np.linalg.norm(z,axis=1)[:,None]**q
@@ -138,7 +138,7 @@ def main(seed=2022):
         print('{0:4d}   {1: 3.6f}   {2: 3.6f}   {3: 3.6f}   {4: 3.6f}'.format(Nfeval, Xi[0], Xi[1], Xi[2], fval))
         Nfeval += 1
         FUN.append(fval)
-        if stpo.misfit.data_src=='simulation':
+        if stpo.misfit.data_set=='simulation':
             Xi_=T(Xi) if args.whiten else Xi
             ERR.append(np.linalg.norm((stpo.prior.vec2fun(Xi_) if stpo.prior.space=='vec' else Xi_) -truth.flatten(order='F'))/np.linalg.norm(truth))
     print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))

@@ -46,10 +46,23 @@ else:
                 try:
                     f_read=np.load(os.path.join(fld_i,f_i))
                     samp=f_read[-4]
-                    if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
-                    med_f[i]=np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                    mean_f[i]=np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                    std_f[i]=np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                    try:
+                        if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
+                        med_f[i]=np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                        mean_f[i]=np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                        std_f[i]=np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                    except Exception as e:
+                        print(e)
+                        mean_f=0; std_f=0
+                        n_samp=samp.shape[0]
+                        for i in range(n_samp):
+                            samp_i=emj.prior.vec2fun(samp[i]) if emj.prior.space=='vec' else samp[i]
+                            mean_f+=samp_i/n_samp
+                            std_f+=samp_i**2/n_samp
+                        std_f=np.sqrt(std_f-mean_f**2)
+                        mean_f=mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                        std_f=std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                        med_f=None
                     f.close()
                     print(f_i+' has been read!'); break
                 except:
@@ -59,6 +72,7 @@ else:
 
 # plot
 for i in range(num_algs):
-    emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_median')
+    if med_f is not None:
+        emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_median')
     emj.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_mean')
     emj.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_std')

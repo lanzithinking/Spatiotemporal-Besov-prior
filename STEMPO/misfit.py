@@ -7,7 +7,7 @@ Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -40,20 +40,19 @@ class misfit(object):
         """
         Initialize data-misfit class with information of observations.
         """
-        self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
-        # self.jit = kwargs.pop('jit',1e-3) # jitter to the noise covariance
         # get observations
-        self.data_src = kwargs.pop('data_src','simulation') # data source
+        self.data_set = kwargs.pop('data_set','simulation') # data set
+        self.data_thinning = kwargs.pop('data_thinning',16) # data thinning (for real)
         self.obs, nzvar, self.sz_x, self.sz_t, self.truth = self.get_obs(**kwargs)
+        self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
         # self.nzcov = self.nzlvl * max(np.diag(nzcov)) * (nzcov + self.jit * sps.eye(nzcov.shape[0]))
         self.nzcov = self.nzlvl * max(nzvar) * ( sps.eye(nzvar.shape[0], format='csr'))
     
-    def _gen_stempo(self, source=None):
+    def _gen_stempo(self):
         """
         Generate stempo observations
         """
-        if source is None: source = self.data_src
-        data_file = {'simulation':'stempo_ground_truth_2d_b4','real':'stempo_seq8x45_2d_b16'}[source]+'.mat'
+        data_file = {'simulation':'stempo_ground_truth_2d_b4','real':'stempo_seq8x45_2d_b'+str(self.data_thinning)}[self.data_set]+'.mat'
         if not os.path.exists('./data'): os.makedirs('./data')
         if not os.path.exists('./data/'+data_file):
             import requests
@@ -62,7 +61,7 @@ class misfit(object):
             with open('./data/'+data_file, "wb") as file:
                 file.write(r.content)
             print("Stempo data downloaded.")
-        if source=='simulation':
+        if self.data_set=='simulation':
             truth = spio.loadmat('./data/'+data_file)
             image = truth['obj']
             nx, ny, nt = 560, 560, 20;
@@ -120,11 +119,11 @@ class misfit(object):
             b = saveb.flatten(order ='F') 
             # xf = savex_true.flatten(order = 'F')
             truth = savex_true.reshape((nx, ny, nt), order='F').transpose((2,0,1))
-        elif source=='real':
+        elif self.data_set=='real':
             import h5py
-            nx, ny, nt =  140, 140, 8
-            N = 140
-            N_det = 140
+            N = int(2240/self.data_thinning) # 140
+            nx, ny, nt =  N, N, 8
+            N_det = N
             N_theta = 45
             theta = np.linspace(0,360,N_theta,endpoint=False)
             # Load measurement data as sinogram
@@ -134,7 +133,7 @@ class misfit(object):
             m = np.array(CtData["sinogram"]).T # strange: why is it transposed?
             # Load parameters
             param = CtData["parameters"]
-            f = h5py.File('A_seqData.mat')
+            f = h5py.File('A_seqData.mat') # it is created by `create_ct_matrix_2d_fan_astra.m` separately
             fA = f["A"]
             # Extract information
             Adata = np.array(fA["data"])
@@ -184,7 +183,7 @@ class misfit(object):
         Get observations
         """
         obs_file_loc=kwargs.pop('obs_file_loc',os.getcwd())
-        obs_file_name='stempo_'+self.data_src+'_obs'
+        obs_file_name='stempo_obs_'+self.data_set+('_thinning'+str(self.data_thinning) if self.data_set=='real' and self.data_thinning>1 else '')
         try:
             loaded=np.load(os.path.join(obs_file_loc,obs_file_name+'.npz'),allow_pickle=True)
             obs=loaded['obs']; nzvar=loaded['nzvar']; sz_x=loaded['sz_x']; sz_t=loaded['sz_t']; truth=loaded['truth']
@@ -245,10 +244,11 @@ class misfit(object):
         #     obs = np.stack([ops_proj[j].dot(u[:,j]) for j in range(self.sz_t)]).T
         
         def hess(v):
-            if v.shape[0]!=np.prod(self.sz_x):
-                v=v.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
-            obs_v = np.stack([ops_proj[j].dot(v[:,j]) for j in range(self.sz_t)]).T
-            return self.grad(obs=obs_v+np.stack(obs_proj).T)
+            if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
+                v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
+            if v.ndim==2: v=v[:,:,None]
+            Hv = np.stack([ops_proj[j].T.dot(spsla.spsolve(self.nzcov,ops_proj[j].dot(v[:,j,:]))) for j in range(self.sz_t)]).swapaxes(0,1)
+            return Hv.squeeze()
         return hess
     
     def noise(self):
@@ -329,8 +329,8 @@ if __name__ == '__main__':
     from prior import *
     
     # define the misfit
-    data_src = 'simulation'
-    msft = misfit(data_src=data_src)
+    data_set = 'simulation'
+    msft = misfit(data_set=data_set)
     # define the prior
     pri = prior(sz_x=msft.sz_x,sz_t=msft.sz_t)
     
@@ -361,7 +361,7 @@ if __name__ == '__main__':
     xx=msft.reconstruct_anisoTV()
     # plot
     # import matplotlib.pyplot as plt
-    msft.plot_reconstruction(xx, save_imgs=True, save_path='./reconstruction/anisoTV_'+msft.data_src)
+    msft.plot_reconstruction(xx, save_imgs=True, save_path='./reconstruction/anisoTV_'+msft.data_set)
     
     # evaluate the likelihood at anisoTV reconstruction
     u=xx.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
@@ -373,7 +373,7 @@ if __name__ == '__main__':
     x_hat=msft.reconstruct_LSE(lmda=10)
     # plot
     # import matplotlib.pyplot as plt
-    msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE_'+msft.data_src)
+    msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE_'+msft.data_set)
     
     # evaluate the likelihood at anisoTV reconstruction
     u=x_hat.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')

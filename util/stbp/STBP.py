@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "1.0"
+__version__ = "1.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -166,6 +166,16 @@ class STBP(BSV):
         """
         return BSV.logdet(self)
     
+    def _proj(self,u,**kwargs):
+        """
+        Project function u to xi on its frequency domain
+        """
+        alpha=kwargs.get('alpha',-1.0/self.bsv.q)
+        if u.shape[:2]!=(self.I,self.J): u=u.reshape((self.I,self.J,-1),order='F')
+        eigv,eigf=self.bsv.eigs();
+        xi = np.tensordot(eigf,u,axes=(0,0))*eigv[:,None,None]**alpha # (L,J,K_)
+        return xi.squeeze()
+    
     def logpdf(self,X,incldet=True):
         """
         Compute logpdf of centered spatiotemporal Besov process X ~ STBP(0,C,q)
@@ -174,18 +184,14 @@ class STBP(BSV):
         if np.ndim(X)<3: X=X[:,:,None]
         if not self.spdapx:
             # logpdf,q_ldet=BSV.logpdf(self.bsv,self.qep.act(X,alpha=-.5,transp=True).reshape((self.I,-1),order='F'),incldet=incldet)
-            logpdf,q_ldet=self.qep.logpdf(self.bsv.act(X,alpha=-1.0/self.bsv.q).swapaxes(0,1).reshape((self.J,-1),order='F'),incldet=incldet) # works for single trial
+            logpdf,q_ldet=self.qep.logpdf(self._proj(X,alpha=-1.0/self.bsv.q).swapaxes(0,1).reshape((self.J,-1),order='F'),incldet=incldet)
         else:
-            eigv,eigf=self.bsv.eigs();
-            abs_eigv=abs(eigv)
-            # q_ldet=-X.shape[1]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))*self.J if incldet else 0
-            # proj_X=eigf.T.dot(X.reshape((self.J,self.I,-1)))/self.gamma[:,None,None] # (L,J,K_)
-            q_ldet=-X.shape[2]*np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))/self.bsv.q if incldet else 0
-            proj_X=np.tensordot(eigf,X,axes=(0,0))/eigv[:,None,None]**(1.0/self.bsv.q) # (L,J,K_)
-            proj_X=proj_X.swapaxes(0,1).reshape((self.J,-1),order='F')
-            qep_norm=self.qep.logpdf(proj_X,out='norms')
-            qsum=-0.5*np.sum(qep_norm**(self.bsv.q/self.qep.q))
-            logpdf=q_ldet+qsum
+            q_ldet=-X.shape[2]*(self.J*self.bsv.logdet()/self.bsv.q+self.I*self.qep.logdet()/2) if incldet else 0
+            proj_X=self._proj(X,alpha=-1.0/self.bsv.q).swapaxes(0,1).reshape((self.J,-1),order='F')
+            norms=self.qep.logpdf(proj_X,out='norms')**(self.bsv.q/self.qep.q)
+            qsum=-0.5*np.sum(norms)
+            log_r=np.sum(np.log(norms))*self.N/2*(1-2/self.bsv.q)
+            logpdf=q_ldet+qsum+log_r
         return logpdf,q_ldet
     
     def rnd(self,n=1):

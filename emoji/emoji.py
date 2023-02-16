@@ -8,7 +8,7 @@ Created July 5, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -170,18 +170,17 @@ class emoji:
         eigs = spsla.eigsh(H_op,min(k,H_op.shape[0]-1),maxiter=maxiter,tol=tol)
         return eigs
     
-    def get_MAP(self,SAVE=False,**kwargs):
+    def get_MAP(self,SAVE=False,PRINT=True,**kwargs):
         """
         Get the maximum a posterior (MAP).
         """
         ncg = kwargs.pop('NCG',False) # choose whether to use conjugate gradient optimization method
         import time
         sep = "\n"+"#"*80+"\n"
-        print( sep, "Find the MAP point"+({True:' using Newton CG',False:''}[ncg]), sep)
+        if PRINT: print( sep, "Find the MAP point"+({True:' using Newton CG',False:''}[ncg]), sep)
         # set up initial point
         # param0 = self.prior.sample('vec')
-        if not hasattr(self, 'init_parameter'): self._init_param(**kwargs)
-        param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
+        param0 = kwargs.pop('param0', self.init_parameter if hasattr(self, 'init_parameter') else self._init_param(**kwargs))
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
         if ncg: hessp = lambda parameter, v: self._get_HessApply(parameter, MF_only=False)(v)
@@ -191,23 +190,25 @@ class emoji:
             global Nfeval
             print('{0:4d}   {1: 3.6f}   {2: 3.6f}   {3: 3.6f}   {4: 3.6f}'.format(Nfeval, Xi[0], Xi[1], Xi[2], fun(Xi)))
             Nfeval += 1
-        print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))
+        if PRINT: print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))
         # solve for MAP
+        options = kwargs.pop('options',{'maxiter':1000,'disp':True})
         start = time.time()
         if ncg:
-            # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, hessp=hessp, callback=call_back, options={'maxiter':100,'disp':True})
-            res = optimize.minimize(fun, param0, method='trust-ncg', jac=grad, hessp=hessp, callback=call_back, options={'maxiter':1000,'disp':True})
+            # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, hessp=hessp, callback=call_back if PRINT else None, options=options)
+            res = optimize.minimize(fun, param0, method='trust-ncg', jac=grad, hessp=hessp, callback=call_back if PRINT else None, options=options)
         else:
-            # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-            res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':1000,'disp':True})
+            # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back if PRINT else None, options=options)
+            res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back if PRINT else None, options=options)
         end = time.time()
-        print('\nTime used is %.4f' % (end-start))
-        # print out info
-        if res.success:
-            print('\nConverged in ', res.nit, ' iterations.')
-        else:
-            print('\nNot Converged.')
-        print('Final function value: %.4f.\n' % res.fun)
+        if PRINT:
+            print('\nTime used is %.4f' % (end-start))
+            # print out info
+            if res.success:
+                print('\nConverged in ', res.nit, ' iterations.')
+            else:
+                print('\nNot Converged.')
+            print('Final function value: %.4f.\n' % res.fun)
         
         MAP = res.x
         

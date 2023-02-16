@@ -11,7 +11,7 @@ https://arxiv.org/abs/1803.03344
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -82,6 +82,8 @@ class wht_geoinfMC:
         if hasattr(self.model, 'posterior'):
             # v = self.model.posterior.K_act(v, 0.5)
             v = self.model.posterior.sample()
+        elif hasattr(self.model, 'whiten'):
+            v = self.model.whiten.sample()
         else:
             v = np.random.randn(self.dim)
         return v
@@ -289,7 +291,7 @@ class wht_geoinfMC:
         pw = rth/2*v.dot(ng)
 
         # current energy
-        E_cur = -self.ll + self.h/8*ng.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(self.eigs[0])
+        E_cur = -self.ll - self.h/8*ng.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(self.eigs[0])
 
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -318,7 +320,7 @@ class wht_geoinfMC:
         pw += rth/2*v.dot(ng)
 
         # new energy
-        E_prp = -ll + self.h/8*ng.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(eigs[0])
+        E_prp = -ll - self.h/8*ng.dot(ng) +0.5*self.model.posterior.H_act(v).dot(v) +0.5*self.model.posterior.logdet(eigs[0])
 
         # Metropolis test
         logr=-E_prp+E_cur-pw

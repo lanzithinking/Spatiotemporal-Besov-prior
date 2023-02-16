@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -284,7 +284,7 @@ class qEP:
         norms=abs(np.sum(quad,axis=0))**(self.q/2)
         if out=='logpdf':
             quad=-0.5*np.sum(norms)
-            log_r=np.log(np.sum(norms))*self.N/2*(1-2/self.q)
+            log_r=np.sum(np.log(norms))*self.N/2*(1-2/self.q)
             # scal_fctr=X.shape[1]*(np.log(self.q)-self.N/2*np.log(np.pi)-(1+self.N/2)*np.log(2))
             logpdf=half_ldet+quad+log_r#+scal_fctr
             return logpdf,half_ldet#,scal_fctr

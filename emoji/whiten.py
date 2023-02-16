@@ -7,7 +7,7 @@ Created February 1, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -24,6 +24,7 @@ class whiten:
     """
     def __init__(self,prior):
         self.prior = prior # STBP prior containing bsv (spatial) and qep (temporal) submodules
+        self.mean = None if self.prior.mean is None else self.stbp2wn(self.prior.mean)
     
     def wn2qep(self,z,dord=0,q=None):
         """
@@ -112,6 +113,17 @@ class whiten:
         if dord==1:
             return (2/q-1)*self.prior.J*(_z/nm_z**2).reshape(z.shape,order='F')
     
+    def sample(self, mean=None):
+        """
+        Generate white noise sample
+        """
+        if mean is None:
+            mean=self.mean
+        u=np.random.randn(self.prior.dim)
+        if mean is not None:
+            u+=mean
+        return u
+    
 if __name__ == '__main__':
     from emoji import emoji
     
@@ -122,7 +134,8 @@ if __name__ == '__main__':
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'s':1.5,'q':1.0,'L':100}
     store_eig = True
-    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
+    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
+    emj.prior.mean = emj.init_parameter
     # define whitened object
     wht = whiten(emj.prior)
     

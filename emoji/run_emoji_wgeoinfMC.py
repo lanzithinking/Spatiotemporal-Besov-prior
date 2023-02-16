@@ -6,7 +6,7 @@ Shiwei Lan @ ASU, 2022
 """
 
 # modules
-import os,argparse#,pickle
+import os,argparse,pickle
 import numpy as np
 import timeit,time
 from scipy import stats
@@ -29,12 +29,12 @@ warnings.filterwarnings(action="once")
 def main(seed=2022):
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('alg_NO', nargs='?', type=int, default=0)
+    parser.add_argument('alg_NO', nargs='?', type=int, default=3)
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
-    parser.add_argument('num_samp', nargs='?', type=int, default=5000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=2000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-7,1e-5,1e-5,1e-3,1e-3))
+    parser.add_argument('num_samp', nargs='?', type=int, default=2000)
+    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-7,1e-5,1e-5,2e-3,1e-3))
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
@@ -62,13 +62,17 @@ def main(seed=2022):
         z_init=emj.whiten.stbp2wn(u_init).flatten(order='F')
     except Exception as e:
         print(e)
-        z_init=np.random.randn({'vec':emj.prior.L*emj.prior.J,'fun':emj.prior.N}[emj.prior.space])
+        z_init=emj.whiten.sample()
     # h=1e-7; v=np.random.randn(emj.prior.L*emj.prior.J)
     # l,g=emj.get_geom(z_init,geom_ord=[0,1],whiten=True)[:2]; hess=emj.get_geom(z_init,geom_ord=[2],whiten=True)[2]
     # Hv=hess(v)
     # l1,g1=emj.get_geom(z_init+h*v,geom_ord=[0,1],whiten=True)[:2]
     # print('error in gradient: %0.8f' %(abs((l1-l)/h-g.dot(v))/np.linalg.norm(v)))
     # print('error in Hessian: %0.8f' %(np.linalg.norm(-(g1-g)/h-Hv)/np.linalg.norm(v)))
+    
+    # # center priors
+    # emj.prior.mean = u_init
+    # emj.whiten.mean = emj.whiten.stbp2wn(emj.prior.mean)
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for %d step(s) using random seed %d..."

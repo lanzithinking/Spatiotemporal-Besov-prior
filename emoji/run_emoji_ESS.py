@@ -61,7 +61,6 @@ def main(seed=2022):
     print("Running the elliptic slice sampler (ESS) for %s prior model taking random seed %d ..." % ('Besov', args.seed_NO))
     
     samp=[]; loglik=[]; times=[]
-    accp=0; acpt=0
     prog=np.ceil((args.num_samp+args.num_burnin)*(.05+np.arange(0,1,.05)))
     beginning=timeit.default_timer()
     for i in range(args.num_samp+args.num_burnin):
@@ -90,7 +89,7 @@ def main(seed=2022):
     savepath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(savepath): os.makedirs(savepath)
     filename='emj_ESS_dim'+str(len(u))+'_'+ctime
-    np.savez_compressed(os.path.join(savepath,filename),spat_args=spat_args, temp_args=temp_args, args=args, samp=samp,loglik=loglik,time_=time_,times=times)
+    np.savez_compressed(os.path.join(savepath,filename), data_args=data_args, spat_args=spat_args, temp_args=temp_args, args=args, samp=samp,loglik=loglik,time_=time_,times=times)
     
     # plot
     # loaded=np.load(os.path.join(savepath,filename+'.npz'))

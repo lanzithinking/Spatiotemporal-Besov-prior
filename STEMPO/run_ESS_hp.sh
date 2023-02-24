@@ -30,25 +30,18 @@ source activate /home/slan7/Projects/STBP/code/astra
 cd ~/Projects/STBP/code/STEMPO
 
 # run python script
-if [ $# -eq 0 ]; then
-	alg_NO=0
+ if [ $# -eq 0 ]; then
 	seed_NO=2022
 	q=1
 elif [ $# -eq 1 ]; then
-	alg_NO="$1"
-	seed_NO=2022
+	seed_NO="$1"
 	q=1
 elif [ $# -eq 2 ]; then
-	alg_NO="$1"
-	seed_NO="$2"
-	q=1
-elif [ $# -eq 3 ]; then
-	alg_NO="$1"
-	seed_NO="$2"
-	q="$3"
+	seed_NO="$1"
+	q="$2"
 fi
 
 
-python -u run_stempo_wgeoinfMC.py ${alg_NO} ${seed_NO} ${q} #> winfmMALA_${q}.log
+python -u run_stempo_ESS_hp.py ${seed_NO} ${q} #> ESS_${q}_hp.log
 
-# sbatch --job-name=winfmMALA --output=winfmMALA.log run_wgeoinfMC.sh
+# sbatch --job-name=ESS-hp --output=ESS_hp.log run_ESS_hp.sh

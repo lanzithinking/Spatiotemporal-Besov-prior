@@ -36,8 +36,8 @@ def main(seed=2022):
     
     # define emoji Bayesian inverse problem
     data_args={'data_set':'60proj','data_thinning':2}
-    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
-    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
+    spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':args.q,'L':2000}
+    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':args.q,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
@@ -94,12 +94,25 @@ def main(seed=2022):
     # plot
     # loaded=np.load(os.path.join(savepath,filename+'.npz'))
     # samp=loaded['samp']
-    
-    if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
-    med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/ESS_median')
+    try:
+        if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
+        med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    except Exception as e:
+        print(e)
+        mean_f=0; std_f=0
+        n_samp=samp.shape[0]
+        for i in range(n_samp):
+            samp_i=emj.prior.vec2fun(samp[i]) if emj.prior.space=='vec' else samp[i]
+            mean_f+=samp_i/n_samp
+            std_f+=samp_i**2/n_samp
+        std_f=np.sqrt(std_f-mean_f**2)
+        mean_f=mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        std_f=std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        med_f=None
+    if med_f is not None:
+        emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/ESS_median')
     emj.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path='./reconstruction/ESS_mean')
     emj.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path='./reconstruction/ESS_std')
 

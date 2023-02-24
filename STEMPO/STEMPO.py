@@ -8,7 +8,7 @@ Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -170,18 +170,17 @@ class STEMPO:
         eigs = spsla.eigsh(H_op,min(k,H_op.shape[0]-1),maxiter=maxiter,tol=tol)
         return eigs
     
-    def get_MAP(self,SAVE=False,**kwargs):
+    def get_MAP(self,SAVE=False,PRINT=True,**kwargs):
         """
         Get the maximum a posterior (MAP).
         """
         ncg = kwargs.pop('NCG',False) # choose whether to use conjugate gradient optimization method
         import time
         sep = "\n"+"#"*80+"\n"
-        print( sep, "Find the MAP point"+({True:' using Newton CG',False:''}[ncg]), sep)
+        if PRINT: print( sep, "Find the MAP point"+({True:' using Newton CG',False:''}[ncg]), sep)
         # set up initial point
         # param0 = self.prior.sample('vec')
-        if not hasattr(self, 'init_parameter'): self._init_param(**kwargs)
-        param0 = self.init_parameter #+ .1*self.prior.sample('vec',0)
+        param0 = kwargs.pop('param0', self.init_parameter if hasattr(self, 'init_parameter') else self._init_param(**kwargs))
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
         grad = lambda parameter: self._get_grad(parameter, MF_only=False)
         if ncg: hessp = lambda parameter, v: self._get_HessApply(parameter, MF_only=False)(v)
@@ -191,23 +190,25 @@ class STEMPO:
             global Nfeval
             print('{0:4d}   {1: 3.6f}   {2: 3.6f}   {3: 3.6f}   {4: 3.6f}'.format(Nfeval, Xi[0], Xi[1], Xi[2], fun(Xi)))
             Nfeval += 1
-        print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))
+        if PRINT: print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))
         # solve for MAP
+        options = kwargs.pop('options',{'maxiter':1000,'disp':True})
         start = time.time()
         if ncg:
-            # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, hessp=hessp, callback=call_back, options={'maxiter':100,'disp':True})
-            res = optimize.minimize(fun, param0, method='trust-ncg', jac=grad, hessp=hessp, callback=call_back, options={'maxiter':1000,'disp':True})
+            # res = optimize.minimize(fun, param0, method='Newton-CG', jac=grad, hessp=hessp, callback=call_back if PRINT else None, options=options)
+            res = optimize.minimize(fun, param0, method='trust-ncg', jac=grad, hessp=hessp, callback=call_back if PRINT else None, options=options)
         else:
-            # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back, options={'maxiter':100,'disp':True})
-            res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back, options={'maxiter':1000,'disp':True})
+            # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, callback=call_back if PRINT else None, options=options)
+            res = optimize.minimize(fun, param0, method='L-BFGS-B', jac=grad, callback=call_back if PRINT else None, options=options)
         end = time.time()
-        print('\nTime used is %.4f' % (end-start))
-        # print out info
-        if res.success:
-            print('\nConverged in ', res.nit, ' iterations.')
-        else:
-            print('\nNot Converged.')
-        print('Final function value: %.4f.\n' % res.fun)
+        if PRINT:
+            print('\nTime used is %.4f' % (end-start))
+            # print out info
+            if res.success:
+                print('\nConverged in ', res.nit, ' iterations.')
+            else:
+                print('\nNot Converged.')
+            print('Final function value: %.4f.\n' % res.fun)
         
         MAP = res.x
         
@@ -215,7 +216,7 @@ class STEMPO:
             import pickle
             fld_name='properties'
             self._check_folder(fld_name)
-            f = open(os.path.join(fld_name,'MAP_'+self.misfit.data_src+'.pckl'),'wb')
+            f = open(os.path.join(fld_name,'MAP_'+self.misfit.data_set+'.pckl'),'wb')
             pickle.dump(MAP, f)
             f.close()
         
@@ -237,9 +238,9 @@ class STEMPO:
         Demo to check results with the exact method against the finite difference method.
         """
         # random sample parameter
-        # parameter = self.prior.sample('vec')
-        if not hasattr(self, 'init_parameter'): self._init_param()
-        parameter = self.init_parameter
+        parameter = self.prior.sample('vec')
+        # if not hasattr(self, 'init_parameter'): self._init_param()
+        # parameter = self.init_parameter
         
         # MF_only = False
         import time
@@ -283,18 +284,18 @@ if __name__ == '__main__':
     seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
+    data_set='simulation'
+    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.01,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    data_src='simulation'
-    stpo = STEMPO(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, data_src=data_src, seed=seed)
+    stpo = STEMPO(data_set=data_set, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
     # test
-    stpo.test(1e-8, MF_only=False)
+    stpo.test(1e-7, MF_only=False)
     # obtain MAP
     map_v = stpo.get_MAP(SAVE=True, NCG=True)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     #  compare it with the truth
-    if stpo.misfit.data_src=='simulation':
+    if stpo.misfit.data_set=='simulation':
         true_param = stpo.misfit.truth
         map_f = stpo.prior.vec2fun(map_v).reshape(true_param.shape, order='F')
         relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
@@ -304,4 +305,4 @@ if __name__ == '__main__':
     print('Minimum cost: %.4f' % min_cost)
     # plot MAP
     map_f = stpo.prior.vec2fun(map_v).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
-    stpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP_'+data_src)
+    stpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP_'+data_set)

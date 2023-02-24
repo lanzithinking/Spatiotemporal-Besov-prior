@@ -24,8 +24,8 @@ store_eig = True
 emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
 
 # algorithms
-algs=('pCN','infMALA','infHMC','infmMALA','infmHMC','ESS')
-alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','$\infty$-mMALA','$\infty$-mHMC','ESS')
+algs=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC','ESS')
+alg_names=('wpCN','w$\infty$-MALA','w$\infty$-HMC','w$\infty$-mMALA','w$\infty$-mHMC','ESS')
 num_algs=len(algs)
 # obtain estimates
 folder = './analysis'
@@ -42,10 +42,10 @@ else:
         print('Processing '+algs[i]+' algorithm...\n')
         # get estimates
         for f_i in npz_files:
-            if '_'+algs[i]+'_' in f_i:
+            if algs[i]+'_' in f_i:
                 try:
-                    f_read=np.load(os.path.join(fld_i,f_i))
-                    samp=f_read[-4]
+                    f_read=np.load(os.path.join(folder,f_i))
+                    samp=f_read['samp']
                     try:
                         if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
                         med_f[i]=np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
@@ -62,7 +62,7 @@ else:
                         std_f=np.sqrt(std_f-mean_f**2)
                         mean_f=mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
                         std_f=std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                        med_f=None
+                        # med_f=None
                     f.close()
                     print(f_i+' has been read!'); break
                 except:
@@ -72,7 +72,9 @@ else:
 
 # plot
 for i in range(num_algs):
-    if med_f is not None:
-        emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_median')
-    emj.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_mean')
-    emj.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_std')
+    if len(med_f[i])!=0:
+        emj.misfit.plot_reconstruction(rcstr_imgs=med_f[i], save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_median')
+    if len(mean_f[i])!=0:
+        emj.misfit.plot_reconstruction(rcstr_imgs=mean_f[i], save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_mean')
+    if len(std_f[i])!=0:
+        emj.misfit.plot_reconstruction(rcstr_imgs=std_f[i], save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_std')

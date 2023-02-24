@@ -18,7 +18,6 @@ import sys
 sys.path.append( "../" )
 from sampler.ESS import ESS
 
-
 np.set_printoptions(precision=3, suppress=True)
 # np.random.seed(2022)
 
@@ -36,7 +35,7 @@ def main(seed=2022):
     
     # define STEMPO Bayesian inverse problem
     data_args={'data_set':'simulation'}
-    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
+    spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':1.0,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
@@ -61,7 +60,6 @@ def main(seed=2022):
     print("Running the elliptic slice sampler (ESS) for %s prior model taking random seed %d ..." % ('Besov', args.seed_NO))
     
     samp=[]; loglik=[]; times=[]
-    accp=0; acpt=0
     prog=np.ceil((args.num_samp+args.num_burnin)*(.05+np.arange(0,1,.05)))
     beginning=timeit.default_timer()
     for i in range(args.num_samp+args.num_burnin):

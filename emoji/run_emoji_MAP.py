@@ -35,8 +35,8 @@ def main(seed=2022):
     np.random.seed(seed)
     
     # define emoji Bayesian inverse problem
-    data_args={'data_set':'60proj','data_thinning':2}
-    spat_args={'basis_opt':args.bass[args.bas_NO],'l':1,'s':1,'q':args.q,'L':2000}
+    data_args={'data_set':'30proj','data_thinning':3}
+    spat_args={'basis_opt':args.bass[args.bas_NO],'l':.1,'s':1.0,'q':args.q,'L':2000}
     if spat_args['basis_opt']=='wavelet': spat_args['wvlet_typ']=args.wavs[args.wav_NO]
     temp_args={'ker_opt':args.kers[args.ker_NO],'l':.5,'q':1.0,'L':100}
     store_eig = True
@@ -63,7 +63,7 @@ def main(seed=2022):
             Hv = emj.whiten.wn2stbp(parameter, 1)(Hv, adj=True) 
             Hv+= emj.whiten.wn2stbp(parameter, 2)(v, emj._get_grad(param, MF_only=False), adj=True)
         return Hv.squeeze()
-    h=1e-6; v=np.random.randn(emj.prior.bsv.L*emj.prior.qep.N) if args.whiten else emj.prior.sample()
+    h=1e-6; v=emj.whiten.sample() if args.whiten else emj.prior.sample()
     # if args.whiten: v=emj.whiten.stbp2wn(v).flatten(order='F')
     f,g,Hv=fun(param0),grad(param0),hessp(param0,v)
     f1,g1=fun(param0+h*v),grad(param0+h*v)

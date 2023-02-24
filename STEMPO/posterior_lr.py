@@ -9,7 +9,7 @@ Created January 11, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -157,12 +157,11 @@ class posterior:
     def logdet(self,eigv=None):
         """
         Compute log-determinant of the kernel K: log|K|
-        generalized eigenvalue case:
-        |K|=-|I+eigV|+|H_0|
+        generalized eigenvalue case: log|K|=-log|I+eigV|+log|H_0|
         """
         if eigv is None:
             eigv,_=self.eigs()
-        abs_eigv=-abs(eigv+self.geig)
+        abs_eigv=abs(eigv+self.geig)
         ldet=-np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(float).eps]))
         return ldet
     

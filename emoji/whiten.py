@@ -125,22 +125,23 @@ class whiten:
         return u
     
 if __name__ == '__main__':
-    from emoji import emoji
+    from prior import prior
     
     seed=2022
     np.random.seed(seed)
-    # define emoji Bayesian inverse problem
+    # define the prior
+    sz_x=128; sz_t=20
     spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.01,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'s':1.5,'q':1.0,'L':100}
     store_eig = True
-    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
-    emj.prior.mean = emj.init_parameter
+    prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='vec', store_eig=store_eig, seed=seed)
+    prior.mean = prior.sample()
     # define whitened object
-    wht = whiten(emj.prior)
+    wht = whiten(prior)
     
     # test
-    h=1e-8; z, v, w=np.random.randn(3,emj.prior.L*emj.prior.J)
+    h=1e-8; z, v, w=np.random.randn(3,prior.L*prior.J)
     # wn2qep (Lmd)
     print('**** Testing wn2qep (Lmd) ****')
     val,grad,hess=wht.wn2qep(z,0),wht.wn2qep(z,1),wht.wn2qep(z,2)
@@ -154,7 +155,7 @@ if __name__ == '__main__':
     print('error in gradient: %0.8f' %(np.linalg.norm((val1-val)/h-grad(v))/np.linalg.norm(v)))
     print('error in Hessian: %0.8f' %(np.linalg.norm((grad1(v)-grad(v))/h-hess(v,w))/np.sqrt(np.linalg.norm(v)*np.linalg.norm(w))))
     
-    h=1e-8; xi, v=np.random.randn(2,emj.prior.L*emj.prior.J)
+    h=1e-8; xi, v=np.random.randn(2,prior.L*prior.J)
     # qep2wn (invLmd)
     print('\n**** Testing qep2wn (invLmd) ****')
     val,grad=wht.qep2wn(xi,0),wht.qep2wn(xi,1)
@@ -170,7 +171,7 @@ if __name__ == '__main__':
     v2=wht.qep2wn(xi,1)(wht.wn2qep(val,1)(v)).flatten(order='F')
     print('Relative error of dinvLmd-dLmd in a random direction between composition and identity: %.10f' % (np.linalg.norm(v2-v)/np.linalg.norm(v)))
     
-    h=1e-8; u, v=np.random.randn(2,emj.prior.L*emj.prior.J)
+    h=1e-8; u, v=np.random.randn(2,prior.L*prior.J)
     # stbp2wn (invT)
     print('\n**** Testing stbp2wn (invT) ****')
     val,grad=wht.stbp2wn(u,0),wht.stbp2wn(u,1)
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     v2=wht.stbp2wn(u,1)(wht.wn2stbp(val,1)(v))
     print('Relative error of dinvT-dT in a random direction between composition and identity: %.10f' % (np.linalg.norm(v2-v)/np.linalg.norm(v)))
     
-    h=1e-8; z, v=np.random.randn(2,emj.prior.L*emj.prior.J)
+    h=1e-8; z, v=np.random.randn(2,prior.L*prior.J)
     # jacdet
     print('\n**** Testing jacdet ****')
     val,grad=wht.jacdet(z,0),wht.jacdet(z,1)

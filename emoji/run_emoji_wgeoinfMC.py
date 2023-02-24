@@ -29,12 +29,12 @@ warnings.filterwarnings(action="once")
 def main(seed=2022):
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('alg_NO', nargs='?', type=int, default=3)
+    parser.add_argument('alg_NO', nargs='?', type=int, default=0)
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
-    parser.add_argument('num_samp', nargs='?', type=int, default=2000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-7,1e-5,1e-5,2e-3,1e-3))
+    parser.add_argument('num_samp', nargs='?', type=int, default=5000)
+    parser.add_argument('num_burnin', nargs='?', type=int, default=2000)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-7,1e-5,1e-5,1e-3,1e-3))
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
@@ -44,8 +44,8 @@ def main(seed=2022):
     
     # define emoji Bayesian inverse problem
     data_args={'data_set':'60proj','data_thinning':2}
-    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
-    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
+    spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':args.q,'L':2000}
+    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':args.q,'L':2000}
     # temp_args={'ker_opt':'powexp','l':.5,'s':2,'q':1.0,'L':100}
     temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
     store_eig = True
@@ -73,6 +73,11 @@ def main(seed=2022):
     # # center priors
     # emj.prior.mean = u_init
     # emj.whiten.mean = emj.whiten.stbp2wn(emj.prior.mean)
+    
+    # adjust the sample size
+    if args.alg_NO>=3:
+        args.num_samp=2000
+        args.num_burnin=1000
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for %d step(s) using random seed %d..."
@@ -128,11 +133,25 @@ def main(seed=2022):
     # samp=loaded['samp']
     samp=res[3]
     
-    if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
-    med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-    emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
+    try:
+        if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
+        med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    except Exception as e:
+        print(e)
+        mean_f=0; std_f=0
+        n_samp=samp.shape[0]
+        for i in range(n_samp):
+            samp_i=emj.prior.vec2fun(samp[i]) if emj.prior.space=='vec' else samp[i]
+            mean_f+=samp_i/n_samp
+            std_f+=samp_i**2/n_samp
+        std_f=np.sqrt(std_f-mean_f**2)
+        mean_f=mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        std_f=std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        med_f=None
+    if med_f is not None:
+        emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_median')
     emj.misfit.plot_reconstruction(rcstr_imgs=mean_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_mean')
     emj.misfit.plot_reconstruction(rcstr_imgs=std_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.alg_NO]+'_std')
 

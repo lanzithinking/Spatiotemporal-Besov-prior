@@ -14,7 +14,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, STBP project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "1.0"
+__version__ = "1.1"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -177,10 +177,10 @@ class BSV:
             resL=L-rtL**2
             if resL>0:
                 # f=np.append(f,psi_jk(x[:,[0]],j=int(np.ceil(np.log2(rtL))),k=np.arange(min(rtL,resL)))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1) # row convention (type='C')
-                f=np.append(f,psi_jk(x[:,[0]],j=int(np.ceil(np.log2(rtL))),k=rtL-2**int(np.ceil(np.log2(rtL))))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1)
+                f=np.append(f,psi_jk(x[:,[0]],j=int(np.ceil(np.log2(rtL))),k=min(rtL,resL))*self._wavelet(x[:,[1]],min(rtL,resL),d=1),axis=1)
                 if resL>rtL:
                     # f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.ceil(np.log2(rtL))),k=np.arange(resL-rtL)),axis=1)
-                    f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.ceil(np.log2(rtL))),k=rtL-2**int(np.ceil(np.log2(rtL)))),axis=1)
+                    f=np.append(f,self._wavelet(x[:,[0]],resL-rtL,d=1)*psi_jk(x[:,[1]],j=int(np.ceil(np.log2(rtL))),k=min(rtL,resL)),axis=1)
             # f/=np.linalg.norm(f,axis=0)
             f/=np.sqrt(self.N)
         else:

@@ -29,7 +29,7 @@ def main(seed=2022):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('ensemble_size', nargs='?', type=int, default=100)
-    parser.add_argument('max_iter', nargs='?', type=int, default=50) 
+    parser.add_argument('max_iter', nargs='?', type=int, default=100) 
     parser.add_argument('step_sizes', nargs='?', type=float, default=[1.,.1])
     parser.add_argument('algs', nargs='?', type=str, default=('EKI','EKS'))
     args = parser.parse_args()
@@ -37,13 +37,14 @@ def main(seed=2022):
     # set up random seed
     np.random.seed(seed)
     # define emoji Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
+    data_args={'data_set':'60proj','data_thinning':2}
+    spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':1.0,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    emj = emoji(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
+    emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
     
     # initialization
-    u0 = np.stack([emj.init_parameter + .1*emj.prior.sample() for _ in range(args.ensemble_size)]) # (esmblsz, LJ), L=200, J=33
+    u0 = np.stack([emj.init_parameter + emj.prior.sample() for _ in range(args.ensemble_size)]) # (esmblsz, LJ), L=200, J=33
     
     # Au = lambda u: np.stack([emj.misfit.obs[0][t].dot(u_t) for t,u_t in enumerate(u.reshape(emj.misfit.sz_t,-1))]).T
     # if args.ensemble_size>200:
@@ -75,7 +76,7 @@ def main(seed=2022):
     emj.prior.cov = sps.spdiags(np.tile(eigv,emj.prior.sz_t),0,emj.prior.L*emj.prior.sz_t,emj.prior.L*emj.prior.sz_t)
     
     # EnK parameters
-    nz_lvl=0.1
+    nz_lvl=1.0
     err_thld=1e-2
  
     # run EnK to generate ensembles
@@ -101,7 +102,7 @@ def main(seed=2022):
     est, err=loaded[:2]
     f.close()
     enk_v=est[np.argmin(err)]
-    enk_f = emj.prior.vec2fun(enk_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    enk_f = np.rot90(emj.prior.vec2fun(enk_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
     emj.misfit.plot_reconstruction(rcstr_imgs=enk_f, save_imgs=True, save_path='./reconstruction/'+args.algs[args.algNO]+'_ensbl'+str(args.ensemble_size))
 
 if __name__ == '__main__':

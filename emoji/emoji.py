@@ -302,5 +302,5 @@ if __name__ == '__main__':
     # # min_cost = emj._get_misfit(map_v)
     # # print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = emj.prior.vec2fun(map_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+    map_f = np.rot90(emj.prior.vec2fun(map_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
     emj.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')

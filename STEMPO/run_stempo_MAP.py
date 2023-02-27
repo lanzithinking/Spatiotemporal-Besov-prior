@@ -103,7 +103,7 @@ def main(seed=2022):
     # store the results
     map_v=stpo.whiten.wn2stbp(res.x) if args.whiten else res.x
     map_f=stpo.prior.vec2fun(map_v) if stpo.prior.space=='vec' else map_v; funs=np.stack(FUN); errs=[] if len(ERR)==0 else np.stack(ERR)
-    map_f=map_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+    map_f=np.rot90(map_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
     # name file
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
     f_name=spat_args['basis_opt']+('_'+spat_args['wvlet_typ'] if spat_args['basis_opt']=='wavelet' else '')+'_'+temp_args['ker_opt']+('_whiten' if args.whiten else '')+('_NCG' if args.NCG else '')

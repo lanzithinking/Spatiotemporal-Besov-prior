@@ -304,5 +304,5 @@ if __name__ == '__main__':
     min_cost = stpo._get_misfit(map_v)
     print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = stpo.prior.vec2fun(map_v).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+    map_f = np.rot90(stpo.prior.vec2fun(map_v).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
     stpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP_'+data_set)

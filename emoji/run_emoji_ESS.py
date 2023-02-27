@@ -96,9 +96,9 @@ def main(seed=2022):
     # samp=loaded['samp']
     try:
         if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
-        med_f = np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-        mean_f = np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-        std_f = np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        med_f = np.rot90(np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+        mean_f = np.rot90(np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+        std_f = np.rot90(np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
     except Exception as e:
         print(e)
         mean_f=0; std_f=0
@@ -108,8 +108,8 @@ def main(seed=2022):
             mean_f+=samp_i/n_samp
             std_f+=samp_i**2/n_samp
         std_f=np.sqrt(std_f-mean_f**2)
-        mean_f=mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-        std_f=std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+        mean_f=np.rot90(mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+        std_f=np.rot90(std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
         med_f=None
     if med_f is not None:
         emj.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/ESS_median')

@@ -38,8 +38,8 @@ def main(seed=2022):
     
     # define STEMPO Bayesian inverse problem
     data_args={'data_set':'simulation'}
-    spat_args={'basis_opt':'Fourier','l':.1,'s':1.5,'q':1.0,'L':2000}
-    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
+    spat_args={'basis_opt':'Fourier','l':.1,'s':1.5,'q':args.q,'L':2000}
+    # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':args.q,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
     stpo = STEMPO(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
@@ -84,7 +84,7 @@ def main(seed=2022):
         print("Running the elliptic slice sampler (ESS) for %s prior model taking random seed %d ..." % ('Besov', args.seed_NO))
     
     # run MCMC to generate samples
-    samp=[]; loglik=[]; times=[]
+    samp_u=[]; loglik=[]; times=[]
     samp_sigma2 = np.zeros((args.num_samp+args.num_burnin))
     samp_eta = np.zeros((args.num_samp+args.num_burnin,2))
     
@@ -196,9 +196,9 @@ def main(seed=2022):
     
     try:
         if stpo.prior.space=='vec': samp_u=stpo.prior.vec2fun(samp_u.T).T
-        med_f = np.median(samp_u,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
-        mean_f = np.mean(samp_u,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
-        std_f = np.std(samp_u,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+        med_f = np.rot90(np.median(samp_u,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
+        mean_f = np.rot90(np.mean(samp_u,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
+        std_f = np.rot90(np.std(samp_u,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
     except Exception as e:
         print(e)
         mean_f=0; std_f=0
@@ -208,8 +208,8 @@ def main(seed=2022):
             mean_f+=samp_i/n_samp
             std_f+=samp_i**2/n_samp
         std_f=np.sqrt(std_f-mean_f**2)
-        mean_f=mean_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
-        std_f=std_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F').swapaxes(0,1)
+        mean_f=np.rot90(mean_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
+        std_f=np.rot90(std_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
         med_f=None
     if med_f is not None:
         stpo.misfit.plot_reconstruction(rcstr_imgs=med_f, save_imgs=True, save_path='./reconstruction/ESS_hp_median')

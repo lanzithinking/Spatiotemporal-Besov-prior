@@ -48,21 +48,21 @@ else:
                     samp=f_read['samp']
                     try:
                         if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
-                        med_f[i]=np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                        mean_f[i]=np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                        std_f[i]=np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
+                        med_f[i]=np.rot90(np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+                        mean_f[i]=np.rot90(np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+                        std_f[i]=np.rot90(np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
                     except Exception as e:
                         print(e)
-                        mean_f=0; std_f=0
+                        mean_f[i]=0; std_f[i]=0
                         n_samp=samp.shape[0]
-                        for i in range(n_samp):
-                            samp_i=emj.prior.vec2fun(samp[i]) if emj.prior.space=='vec' else samp[i]
-                            mean_f+=samp_i/n_samp
-                            std_f+=samp_i**2/n_samp
-                        std_f=np.sqrt(std_f-mean_f**2)
-                        mean_f=mean_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                        std_f=std_f.reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F').swapaxes(0,1)
-                        # med_f=None
+                        for s in range(n_samp):
+                            samp_s=emj.prior.vec2fun(samp[s]) if emj.prior.space=='vec' else samp[s]
+                            mean_f[i]+=samp_s/n_samp
+                            std_f[i]+=samp_s**2/n_samp
+                        std_f[i]=np.sqrt(std_f[i]-mean_f[i]**2)
+                        mean_f[i]=np.rot90(mean_f[i].reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+                        std_f[i]=np.rot90(std_f[i].reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+                        # med_f[i]=None
                     f.close()
                     print(f_i+' has been read!'); break
                 except:

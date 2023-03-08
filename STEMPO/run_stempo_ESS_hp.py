@@ -186,7 +186,7 @@ def main(seed=2022):
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
     savepath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(savepath): os.makedirs(savepath)
-    filename='stpo_ESS_dim'+str(len(u))+'_'+ctime
+    filename='stpo_ESS_hp_dim'+str(len(u))+'_'+ctime
     np.savez_compressed(os.path.join(savepath,filename), data_args=data_args, spat_args=spat_args, temp_args=temp_args, args=args, 
                         samp_u=samp_u, samp_eta=samp_eta, samp_sigma2=samp_sigma2, loglik=loglik,time_=time_,times=times)
     

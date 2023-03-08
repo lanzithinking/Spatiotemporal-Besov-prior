@@ -45,7 +45,7 @@ else:
             if algs[i]+'_' in f_i:
                 try:
                     f_read=np.load(os.path.join(folder,f_i))
-                    samp=f_read['samp']
+                    samp=f_read['samp_u' if '_hp_' in f_i else 'samp']
                     # try:
                     #     if stpo.prior.space=='vec': samp=stpo.prior.vec2fun(samp.T).T
                     #     med_f[i]=np.rot90(np.median(samp,axis=0).reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
@@ -63,7 +63,6 @@ else:
                     mean_f[i]=np.rot90(mean_f[i].reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
                     std_f[i]=np.rot90(std_f[i].reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
                     # med_f[i]=None
-                    f.close()
                     print(f_i+' has been read!'); break
                 except:
                     pass

@@ -1,5 +1,5 @@
 """
-Plot estimates of uncertainty field u in linear inverse problem.
+Plot estimates of uncertainty field u in non-linear inverse problem.
 ----------------------
 Shiwei Lan @ ASU, 2022
 """
@@ -10,18 +10,18 @@ import matplotlib.pyplot as plt
 import matplotlib as mp
 
 # the inverse problem
-from emoji import emoji
+from NSE import *
 
 
 seed=2022
 # define the inverse problem
-data_args={'data_set':'60proj','data_thinning':2}
-spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
-# spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
+data_args={'data_set':'V1e-4','data_thinning':4}
+spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':1.0,'L':2000}
+# spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':.1,'s':2,'q':1.0,'L':2000}
 # temp_args={'ker_opt':'powexp','l':.5,'s':2,'q':1.0,'L':100}
 temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
 store_eig = True
-emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
+nse = NSE(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
 
 # algorithms
 algs=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC','ESS')
@@ -47,21 +47,21 @@ else:
                     f_read=np.load(os.path.join(folder,f_i))
                     samp=f_read['samp_u' if '_hp_' in f_i else 'samp']
                     try:
-                        if emj.prior.space=='vec': samp=emj.prior.vec2fun(samp.T).T
-                        med_f[i]=np.rot90(np.median(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
-                        mean_f[i]=np.rot90(np.mean(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
-                        std_f[i]=np.rot90(np.std(samp,axis=0).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+                        if nse.prior.space=='vec': samp=nse.prior.vec2fun(samp.T).T
+                        med_f[i]=np.median(samp,axis=0).reshape(np.append(nse.misfit.sz_x,nse.misfit.sz_t),order='F')
+                        mean_f[i]=np.mean(samp,axis=0).reshape(np.append(nse.misfit.sz_x,nse.misfit.sz_t),order='F')
+                        std_f[i]=np.std(samp,axis=0).reshape(np.append(nse.misfit.sz_x,nse.misfit.sz_t),order='F')
                     except Exception as e:
                         print(e)
                         mean_f[i]=0; std_f[i]=0
                         n_samp=samp.shape[0]
                         for s in range(n_samp):
-                            samp_s=emj.prior.vec2fun(samp[s]) if emj.prior.space=='vec' else samp[s]
+                            samp_s=nse.prior.vec2fun(samp[s]) if nse.prior.space=='vec' else samp[s]
                             mean_f[i]+=samp_s/n_samp
                             std_f[i]+=samp_s**2/n_samp
                         std_f[i]=np.sqrt(std_f[i]-mean_f[i]**2)
-                        mean_f[i]=np.rot90(mean_f[i].reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
-                        std_f[i]=np.rot90(std_f[i].reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
+                        mean_f[i]=mean_f[i].reshape(np.append(nse.misfit.sz_x,nse.misfit.sz_t),order='F')
+                        std_f[i]=std_f[i].reshape(np.append(nse.misfit.sz_x,nse.misfit.sz_t),order='F')
                         # med_f[i]=None
                     print(f_i+' has been read!'); break
                 except:
@@ -72,8 +72,8 @@ else:
 # plot
 for i in range(num_algs):
     if len(med_f[i])!=0:
-        emj.misfit.plot_reconstruction(rcstr_imgs=med_f[i], save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_median')
+        nse.misfit.plot_data(dat_imgs=med_f[i], save_imgs=True, save_path=folder+'/invsol/'+algs[i]+'_median')
     if len(mean_f[i])!=0:
-        emj.misfit.plot_reconstruction(rcstr_imgs=mean_f[i], save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_mean')
+        nse.misfit.plot_data(dat_imgs=mean_f[i], save_imgs=True, save_path=folder+'/invsol/'+algs[i]+'_mean')
     if len(std_f[i])!=0:
-        emj.misfit.plot_reconstruction(rcstr_imgs=std_f[i], save_imgs=True, save_path=folder+'/reconstruction/'+algs[i]+'_std')
+        nse.misfit.plot_data(dat_imgs=std_f[i], save_imgs=True, save_path=folder+'/invsol/'+algs[i]+'_std')

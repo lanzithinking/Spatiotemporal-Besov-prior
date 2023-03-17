@@ -7,7 +7,7 @@ Created March 3, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -19,7 +19,7 @@ from utilities3 import *
 from torch.autograd.functional import jacobian, hvp, vhp
 
 # self defined modules
-from emulator import *
+from fourier_3d import *
 
 # set to warn only once for the same warnings
 import warnings
@@ -38,19 +38,19 @@ class misfit(object):
         self.data_set = kwargs.pop('data_set','V1e-4') # data set
         self.data_thinning = kwargs.pop('data_thinning',4) # data thinning
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = self._load_model()
+        self.model, self.normalizer = self._load_model()
         self.obs, nzcov, self.sz_x, self.sz_t, self.truth = self.get_obs(**kwargs)
-        self.grid = self._get_grid()
         self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
         # self.nzcov = self.nzlvl * max(torch.diag(nzcov)) * (nzcov + self.jit * torch.eye(nzcov.shape[0]))
-        self.nzcov = self.nzlvl * max(torch.diag(nzcov)) * torch.eye(nzcov.shape[0],device=self.device)#.to_sparse_csr()
+        self.nzcov = self.nzlvl * max(torch.diag(nzcov)) * torch.eye(nzcov.shape[0],device=self.device, dtype=torch.float)#.to_sparse_csr()
     
     def _load_model(self):
         """
         Load trained emulation model
         """
         # load model
-        mdl_name='ns_fourier_'+self.data_set+{'V1e-3':'_T50_N4800_ep500_m12_w32','V1e-4':'_T20_N9800_ep200_m12_w32'}[self.data_set]
+        mdl_name='ns_fourier_3d_'+self.data_set+{'V1e-3':'_T50_N4800_ep500_m12_w32','V1e-4':'_T20_N9800_ep200_m12_w32'}[self.data_set]
+        nml_name=mdl_name+'_normalizer'
         if not os.path.exists('./model'): os.makedirs('./model')
         if not os.path.exists('./model/'+mdl_name):
             url='https://drive.google.com/drive/folders/1swLA6yKR1f3PKdYSKhLqK4zfNjS9pt_U'
@@ -61,8 +61,14 @@ class misfit(object):
             import gdown
             gdown.download_folder(url, quiet=True, use_cookies=False)
             print("NSE trained model downloaded.")
+        if not os.path.exists('./model/'+nml_name):
+            warnings.warn('Normalizer not found!')
         model = torch.load('model/'+mdl_name, map_location=self.device)
-        return model
+        try:
+            normalizer = torch.load('model/'+nml_name, map_location=self.device)
+        except:
+            normalizer = None
+        return model, normalizer
     
     def _gen_solution(self):
         """
@@ -83,41 +89,19 @@ class misfit(object):
             gdown.download_folder(url, quiet=True, use_cookies=False)
             print("NSE data downloaded.")
         reader = MatReader('./data/'+dat_name+'.mat')
-        U = reader.read_field('u')[[0]]
+        U = reader.read_field('u')[[0]] # select one test
         sub_s = self.data_thinning
         sub_t = self.data_thinning
         S = int(U.shape[1]/sub_s)
         T = 20
         T_in = 10
-        indent = 1+int(np.log2(sub_t))
-        truth = U[:,::sub_s,::sub_s, 3:T_in*4:4] #([0, T_in])
-        obs = U[:,::sub_s,::sub_s, indent+T_in*4:indent+(T+T_in)*4:sub_t] #([T_in, T_in + T])
-        # pad the location information (s,t)
+        indent = 2#1+int(np.log2(sub_t))
+        truth = U[:,::sub_s,::sub_s, :T_in*4:4] #([0, T_in])
+        obs = U[:,::sub_s,::sub_s, (indent+T_in)*4:(indent+T+T_in)*4:sub_t] #([T_in, T_in + T])
         T = T * (4//sub_t)
-        # test_a = truth.reshape(1,S,S,1,T_in).repeat([1,1,1,T,1])
-        # gridx = torch.tensor(np.linspace(0, 1, S), dtype=torch.float)
-        # gridx = gridx.reshape(1, S, 1, 1, 1).repeat([1, 1, S, T, 1])
-        # gridy = torch.tensor(np.linspace(0, 1, S), dtype=torch.float)
-        # gridy = gridy.reshape(1, 1, S, 1, 1).repeat([1, S, 1, T, 1])
-        # gridt = torch.tensor(np.linspace(0, 1, T+1)[1:], dtype=torch.float)
-        # gridt = gridt.reshape(1, 1, 1, T, 1).repeat([1, S, S, 1, 1])
-        # test_a = torch.cat((gridx, gridy, gridt, test_a), dim=-1)
-        # out = model(test_a)
+        # out = model(truth)
         nzcov = torch.cov(obs.reshape(-1,T))
         return obs, nzcov, (S,S), T_in, truth.squeeze()
-    
-    def _get_grid(self):
-        """
-        Get grid data
-        """
-        S = self.sz_x; T = self.obs.shape[-1]
-        gridx = torch.tensor(np.linspace(0, 1, S[0]), dtype=torch.float, device=self.device)
-        gridx = gridx.reshape(1, S[0], 1, 1, 1).repeat([1, 1, S[1], T, 1])
-        gridy = torch.tensor(np.linspace(0, 1, S[1]), dtype=torch.float, device=self.device)
-        gridy = gridy.reshape(1, 1, S[1], 1, 1).repeat([1, S[0], 1, T, 1])
-        gridt = torch.tensor(np.linspace(0, 1, T+1)[1:], dtype=torch.float, device=self.device)
-        gridt = gridt.reshape(1, 1, 1, T, 1).repeat([1, S[0], S[1], 1, 1])
-        return gridx, gridy, gridt
     
     def get_obs(self, **kwargs):
         """
@@ -129,7 +113,7 @@ class misfit(object):
             # loaded=np.load(os.path.join(obs_file_loc,obs_file_name+'.mat'),allow_pickle=True)
             # obs=loaded['obs']; nzcov=loaded['nzcov']; sz_x=loaded['sz_x']; sz_t=loaded['sz_t'];
             # grid=loaded['grid'];  truth=loaded['truth']
-            reader = MatReader(os.path.join(obs_file_loc,obs_file_name+'.mat'),to_cuda=self.device=='cuda')
+            reader = MatReader(os.path.join(obs_file_loc,obs_file_name+'.mat'),to_cuda=self.device.type=='cuda')
             obs = reader.read_field('obs'); nzcov=reader.read_field('nzcov'); truth=reader.read_field('truth')
             sz_x = reader.data['sz_x'][0]; sz_t = reader.data['sz_t'][0,0]
             print('Observation file '+obs_file_name+' has been read!')
@@ -152,8 +136,10 @@ class misfit(object):
         """
         u_ = u if torch.is_tensor(u) else torch.tensor(u,dtype=torch.float,device=self.device)
         u_ = u_.reshape(1,self.sz_x[0],self.sz_x[1],1,self.sz_t).repeat([1,1,1,self.obs.shape[-1],1])
-        u_ = torch.cat(self.grid+(u_,),dim=-1)
-        return self.model(u_)
+        out = self.model(u_).view(1,self.sz_x[0],self.sz_x[1],self.obs.shape[-1])
+        if self.normalizer is not None: out = self.normalizer.decode(out)
+        return out
+        # return torch.sin(torch.sum(u_,dim=(0,-1)))
     
     def cost(self, u=None, obs=None):
         """
@@ -186,33 +172,9 @@ class misfit(object):
         if u.shape[0]!=np.prod(self.sz_x):
             u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
         u_ = torch.tensor(u,dtype=torch.float,requires_grad=True,device=self.device)
-        g = jacobian(self.cost, u_)
+        # g = jacobian(self.cost, u_)
+        g = torch.autograd.grad(self.cost(u_), u_)[0]
         return g
-    
-    # def Hess(self, u=None, obs=None):
-    #     """
-    #     Compute the Hessian action of misfit
-    #     """
-    #     if u.shape[0]!=np.prod(self.sz_x):
-    #         u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
-    #     u_ = torch.tensor(u,dtype=torch.float,requires_grad=True,device=self.device)
-    #     if obs is None:
-    #         obs = self._fwd_map(u_)
-    #     dif_obs = (obs - self.obs).reshape((-1,self.obs.shape[-1]))
-    #     val = .5*torch.sum(dif_obs*torch.linalg.solve(self.nzcov,dif_obs))
-    #     val.backward()
-    #     g = u_.grad
-    #     def hess(v):
-    #         g.requires_grad = True
-    #         if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
-    #             v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
-    #         if v.ndim==2: v=v[:,:,None]
-    #         v_ = torch.tensor(v,dtype=torch.float,requires_grad=False,device=self.device)
-    #         gv = torch.sum(g[:,:,None]*v_,dim=(0,1))
-    #         gv.backward()
-    #         Hv = u_.grad
-    #         return Hv
-    #     return hess
     
     def Hess(self, u=None, obs=None):
         """
@@ -221,23 +183,42 @@ class misfit(object):
         if u.shape[0]!=np.prod(self.sz_x):
             u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
         u_ = torch.tensor(u,dtype=torch.float,requires_grad=True,device=self.device)
+        g = torch.autograd.grad(self.cost(u_), u_, create_graph=True)[0]
         def hess(v):
             if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
                 v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
-            # if v.ndim==2: v=v[:,:,None]
+            if v.ndim==2: v=v[:,:,None]
             v_ = torch.tensor(v,dtype=torch.float,requires_grad=False,device=self.device)
-            # import time
-            # start = time.time()
-            # Hv = hvp(self.cost, u_, v_)[1]
-            # end = time.time()
-            # print('Time: %.4f' % (end-start))
-            # start = time.time()
-            Hv = vhp(self.cost, u_ if v_.ndim==2 else u_[:,:,None].repeat([1,1,v_.shape[-1]]), v_)[1]
-            # Hv = torch.stack([vhp(self.cost, u_ , v_[:,:,i])[1] for i in range(v_.shape[-1])],dim=2)
-            # end = time.time()
-            # print('Time: %.4f' % (end-start))
-            return Hv.squeeze()
+            gv = torch.sum(g[:,:,None]*v_,dim=(0,1))
+            gv.backward()
+            Hv = u_.grad
+            return Hv
         return hess
+    
+    # def Hess(self, u=None, obs=None):
+    #     """
+    #     Compute the Hessian action of misfit
+    #     """
+    #     if u.shape[0]!=np.prod(self.sz_x):
+    #         u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
+    #     u_ = torch.tensor(u,dtype=torch.float,requires_grad=True,device=self.device)
+    #     def hess(v):
+    #         if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
+    #             v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
+    #         # if v.ndim==2: v=v[:,:,None]
+    #         v_ = torch.tensor(v,dtype=torch.float,requires_grad=False,device=self.device)
+    #         # import time
+    #         # start = time.time()
+    #         # Hv = hvp(self.cost, u_, v_)[1]
+    #         # end = time.time()
+    #         # print('Time: %.4f' % (end-start))
+    #         # start = time.time()
+    #         Hv = vhp(self.cost, u_ if v_.ndim==2 else u_[:,:,None].repeat([1,1,v_.shape[-1]]), v_)[1]
+    #         # Hv = torch.stack([vhp(self.cost, u_ , v_[:,:,i])[1] for i in range(v_.shape[-1])],dim=2)
+    #         # end = time.time()
+    #         # print('Time: %.4f' % (end-start))
+    #         return Hv.squeeze()
+    #     return hess
     
     def plot_data(self, dat_imgs, save_imgs=False, save_path='./data'):
         """
@@ -256,7 +237,7 @@ class misfit(object):
             plt.draw()
     
 if __name__ == '__main__':
-    np.random.seed(2022)
+    # np.random.seed(2022)
     import time
     from prior import *
     
@@ -278,7 +259,7 @@ if __name__ == '__main__':
     # test
     # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
     v=pri.sample('fun').reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
-    h=1e-5
+    h=1e-2
     gradv_fd=(msft.cost(u+h*v).detach().cpu().numpy()-nll)/h
     gradv=np.sum(grad*v)
     rdiff_gradv=np.abs(gradv_fd-gradv)/np.linalg.norm(v)

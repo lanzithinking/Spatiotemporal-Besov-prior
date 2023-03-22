@@ -126,7 +126,7 @@ s = 64 # training 64 testing 256
 # viscosity
 V = 1e-3
 # time span
-T = 30 # training 30 testing 50
+T = 50 # training 50 testing 50
 
 #Number of solutions to generate
 N = 5000 # training 5000 testing 20
@@ -153,7 +153,7 @@ X,Y = torch.meshgrid(t, t)#, indexing='ij')
 f = 0.1*(torch.sin(2*math.pi*(X + Y)) + torch.cos(2*math.pi*(X + Y)))
 
 #Number of snapshots from solution
-record_steps = 30 # training 30 testing 200
+record_steps = 50 # training 50 testing 200
 
 #Inputs
 a = torch.zeros(N, s, s)

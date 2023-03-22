@@ -9,8 +9,11 @@ import torch.nn.functional as F
 from utilities3 import *
 from timeit import default_timer
 
-torch.manual_seed(0)
-np.random.seed(0)
+# torch.manual_seed(0)
+# np.random.seed(0)
+
+# set default floating point
+torch.set_default_tensor_type(torch.DoubleTensor)
 
 ################################################################
 # 3d fourier layers
@@ -149,25 +152,30 @@ class FNO3d(nn.Module):
 
     def get_grid(self, shape, device):
         batchsize, size_x, size_y, size_z = shape[0], shape[1], shape[2], shape[3]
-        gridx = torch.tensor(np.linspace(0, 1, size_x), dtype=torch.float)
+        gridx = torch.tensor(np.linspace(0, 1, size_x), dtype=torch.float64)
         gridx = gridx.reshape(1, size_x, 1, 1, 1).repeat([batchsize, 1, size_y, size_z, 1])
-        gridy = torch.tensor(np.linspace(0, 1, size_y), dtype=torch.float)
+        gridy = torch.tensor(np.linspace(0, 1, size_y), dtype=torch.float64)
         gridy = gridy.reshape(1, 1, size_y, 1, 1).repeat([batchsize, size_x, 1, size_z, 1])
-        gridz = torch.tensor(np.linspace(0, 1, size_z), dtype=torch.float)
+        gridz = torch.tensor(np.linspace(0, 1, size_z), dtype=torch.float64)
         gridz = gridz.reshape(1, 1, 1, size_z, 1).repeat([batchsize, size_x, size_y, 1, 1])
         return torch.cat((gridx, gridy, gridz), dim=-1).to(device)
 
 
 if __name__ == '__main__':
-    
+    torch.manual_seed(0)
+    np.random.seed(0)
+    import os
     ################################################################
     # configs
     ################################################################
     
-    TRAIN_PATH = 'data/ns_data_V1e-4_N10000_T20.mat'
-    TEST_PATH = 'data/ns_data_V1e-4_N10000_T20.mat'
+    # viscosity
+    V = 1e-3
     
-    ntrain = 9800
+    TRAIN_PATH = 'data/ns_data_V'+format(V,'.0e').replace("e-0", "e-")+'_N5000_T50.mat'
+    TEST_PATH = 'data/ns_data_V'+format(V,'.0e').replace("e-0", "e-")+'_N5000_T50.mat'
+    
+    ntrain = 4800
     ntest = 200
     
     modes = 12
@@ -175,19 +183,23 @@ if __name__ == '__main__':
     
     batch_size = 20
     learning_rate = 0.001
-    epochs = 200
+    epochs = 200 # 500 doubles the training time
     iterations = epochs*(ntrain//batch_size)
     
     sub = 1
     S = 64 // sub
     T_in = 10
-    T = 20 # T=40 for V1e-3; T=20 for V1e-4; T=10 for V1e-5;
+    T = 30 # T=40 for V1e-3; T=20 for V1e-4; T=10 for V1e-5;
     
-    path = 'ns_fourier_3d_V1e-3_T'+str(T)+'_N'+str(ntrain) +'_ep' + str(epochs) + '_m' + str(modes) + '_w' + str(width)
+    have_normalizer = False
+    
+    path = 'ns_fourier_3d_V'+format(V,'.0e').replace("e-0", "e-")+'_T'+str(T)+'_N'+str(ntrain) +'_ep' + str(epochs) + '_m' + str(modes) + '_w' + str(width)
+    os.makedirs('./model', exist_ok=True)
     path_model = 'model/'+path
+    os.makedirs('./result', exist_ok=True)
     path_train_err = 'result/'+path+'_train.txt'
     path_test_err = 'result/'+path+'_test.txt'
-    path_normalizer = 'model/'+path+'_normalizer'
+    if have_normalizer: path_normalizer = 'model/'+path+'_normalizer'
     
     runtime = np.zeros(2, )
     t1 = default_timer()
@@ -209,13 +221,13 @@ if __name__ == '__main__':
     assert (S == train_u.shape[-2])
     assert (T == train_u.shape[-1])
     
-    
-    a_normalizer = UnitGaussianNormalizer(train_a)
-    train_a = a_normalizer.encode(train_a)
-    test_a = a_normalizer.encode(test_a)
-    
-    y_normalizer = UnitGaussianNormalizer(train_u)
-    train_u = y_normalizer.encode(train_u)
+    if have_normalizer:
+        a_normalizer = UnitGaussianNormalizer(train_a)
+        train_a = a_normalizer.encode(train_a)
+        test_a = a_normalizer.encode(test_a)
+        
+        y_normalizer = UnitGaussianNormalizer(train_u)
+        train_u = y_normalizer.encode(train_u)
     
     train_a = train_a.reshape(ntrain,S,S,1,T_in).repeat([1,1,1,T,1])
     test_a = test_a.reshape(ntest,S,S,1,T_in).repeat([1,1,1,T,1])
@@ -237,7 +249,7 @@ if __name__ == '__main__':
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=iterations)
     
     myloss = LpLoss(size_average=False)
-    y_normalizer.to(device)
+    if have_normalizer: y_normalizer.to(device)
     for ep in range(epochs):
         model.train()
         t1 = default_timer()
@@ -251,9 +263,10 @@ if __name__ == '__main__':
     
             mse = F.mse_loss(out, y, reduction='mean')
             # mse.backward()
-    
-            y = y_normalizer.decode(y)
-            out = y_normalizer.decode(out)
+            
+            if have_normalizer:
+                y = y_normalizer.decode(y)
+                out = y_normalizer.decode(out)
             l2 = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
             l2.backward()
     
@@ -269,7 +282,7 @@ if __name__ == '__main__':
                 x, y = x.to(device), y.to(device)
     
                 out = model(x).view(batch_size, S, S, T)
-                out = y_normalizer.decode(out)
+                if have_normalizer: out = y_normalizer.decode(out)
                 test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
     
         train_mse /= len(train_loader)
@@ -279,7 +292,7 @@ if __name__ == '__main__':
         t2 = default_timer()
         print(ep, t2-t1, train_mse, train_l2, test_l2)
     torch.save(model, path_model)
-    torch.save(y_normalizer, path_normalizer)
+    if have_normalizer: torch.save(y_normalizer, path_normalizer)
     
     pred = torch.zeros(test_u.shape)
     index = 0
@@ -290,11 +303,11 @@ if __name__ == '__main__':
             x, y = x.to(device), y.to(device)
     
             out = model(x).view(1, S, S, T)
-            out = y_normalizer.decode(out)
+            if have_normalizer: out = y_normalizer.decode(out)
             pred[index] = out
     
             test_l2 += myloss(out.view(1, -1), y.view(1, -1)).item()
             print(index, test_l2)
             index = index + 1
-    
+    os.makedirs('./pred', exist_ok=True)
     scipy.io.savemat('pred/'+path+'.mat', mdict={'pred': pred.cpu().numpy()})

@@ -35,8 +35,8 @@ def main(seed=2022):
     np.random.seed(seed)
     
     # define NSE Bayesian inverse problem
-    data_args={'data_set':'V1e-4','data_thinning':4,'nzlvl':0.1}
-    spat_args={'basis_opt':args.bass[args.bas_NO],'l':1,'s':1.0,'q':args.q,'L':2000}
+    data_args={'data_set':'V1e-3','data_thinning':4}#,'nzlvl':0.1}
+    spat_args={'basis_opt':args.bass[args.bas_NO],'l':.1,'s':1.0,'q':args.q,'L':2000}
     if spat_args['basis_opt']=='wavelet': spat_args['wvlet_typ']=args.wavs[args.wav_NO]
     temp_args={'ker_opt':args.kers[args.ker_NO],'l':.5,'q':1.0,'L':100}
     store_eig = True

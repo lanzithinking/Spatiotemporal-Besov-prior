@@ -7,7 +7,7 @@ Created March 3, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -49,7 +49,7 @@ class misfit(object):
         Load trained emulation model
         """
         # load model
-        mdl_name='ns_fourier_3d_'+self.data_set+{'V1e-3':'_T50_N4800_ep500_m12_w32','V1e-4':'_T20_N9800_ep200_m12_w32'}[self.data_set]
+        mdl_name='ns_fourier_3d_'+self.data_set+{'V1e-3':'_T30_N4800_ep200_m12_w32','V1e-4':'_T20_N9800_ep200_m12_w32'}[self.data_set]
         nml_name=mdl_name+'_normalizer'
         if not os.path.exists('./model'): os.makedirs('./model')
         if not os.path.exists('./model/'+mdl_name):
@@ -75,7 +75,7 @@ class misfit(object):
         Generate (emulated) NSE solution
         """
         # load data
-        dat_name='ns_data_'+self.data_set+{'V1e-3':'_N5000_T50','V1e-4':'_N20_T50_R256test','V1e-5':'_N1200_T20'}[self.data_set]
+        dat_name='ns_data_'+self.data_set+{'V1e-3':'_N20_T50_R256test','V1e-4':'_N20_T50_R256test','V1e-5':'_N1200_T20'}[self.data_set]
         if not os.path.exists('./data'): os.makedirs('./data')
         if not os.path.exists('./data/'+dat_name+'.mat'):
             dat_name='NavierStokes_'+self.data_set+{'V1e-3':'_N5000_T50','V1e-4':'_N20_T50_R256_test','V1e-5':'_N1200_T20'}[self.data_set]
@@ -93,11 +93,12 @@ class misfit(object):
         sub_s = self.data_thinning
         sub_t = self.data_thinning
         S = int(U.shape[1]/sub_s)
-        T = 20
+        T = 30
         T_in = 10
-        indent = 2#1+int(np.log2(sub_t))
+        # indent = 2#1+int(np.log2(sub_t))
         truth = U[:,::sub_s,::sub_s, :T_in*4:4] #([0, T_in])
-        obs = U[:,::sub_s,::sub_s, (indent+T_in)*4:(indent+T+T_in)*4:sub_t] #([T_in, T_in + T])
+        # obs = U[:,::sub_s,::sub_s, (indent+T_in)*4:(indent+T+T_in)*4:sub_t] #([T_in, T_in + T])
+        obs = U[:,::sub_s,::sub_s, T_in*4:(T+T_in)*4:sub_t] #([T_in, T_in + T])
         T = T * (4//sub_t)
         # out = model(truth)
         nzcov = torch.cov(obs.reshape(-1,T))
@@ -187,11 +188,20 @@ class misfit(object):
         def hess(v):
             if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
                 v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
-            if v.ndim==2: v=v[:,:,None]
+            # if v.ndim==2: v=v[:,:,None]
             v_ = torch.tensor(v,dtype=torch.float,requires_grad=False,device=self.device)
-            gv = torch.sum(g[:,:,None]*v_,dim=(0,1))
-            gv.backward()
-            Hv = u_.grad
+            if v_.ndim==2:
+                # gv = torch.sum(g[:,:,None]*v_,dim=(0,1))
+                gv = torch.sum(g*v_)
+                gv.backward()
+                Hv = u_.grad
+            elif v_.ndim==3:
+                torch._C._debug_only_display_vmap_fallback_warnings(True)
+                Hv = torch.autograd.grad(g, u_,  v_.permute((2,0,1)), is_grads_batched=True)[0]
+                Hv = Hv.permute((1,2,0)).squeeze()
+            else:
+                warnings.warn('Wrong dimension in Hessian-vector product!')
+                Hv = None
             return Hv
         return hess
     
@@ -205,7 +215,7 @@ class misfit(object):
     #     def hess(v):
     #         if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
     #             v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
-    #         # if v.ndim==2: v=v[:,:,None]
+    #         if v.ndim==2: v=v[:,:,None]
     #         v_ = torch.tensor(v,dtype=torch.float,requires_grad=False,device=self.device)
     #         # import time
     #         # start = time.time()
@@ -213,8 +223,8 @@ class misfit(object):
     #         # end = time.time()
     #         # print('Time: %.4f' % (end-start))
     #         # start = time.time()
-    #         Hv = vhp(self.cost, u_ if v_.ndim==2 else u_[:,:,None].repeat([1,1,v_.shape[-1]]), v_)[1]
-    #         # Hv = torch.stack([vhp(self.cost, u_ , v_[:,:,i])[1] for i in range(v_.shape[-1])],dim=2)
+    #         # Hv = vhp(self.cost, u_ if v_.ndim==2 else u_[:,:,None].repeat([1,1,v_.shape[-1]]), v_)[1]
+    #         Hv = torch.stack([vhp(self.cost, u_ , v_[:,:,i])[1] for i in range(v_.shape[-1])],dim=2)
     #         # end = time.time()
     #         # print('Time: %.4f' % (end-start))
     #         return Hv.squeeze()
@@ -237,12 +247,12 @@ class misfit(object):
             plt.draw()
     
 if __name__ == '__main__':
-    # np.random.seed(2022)
+    np.random.seed(2022)
     import time
     from prior import *
     
     # define the misfit
-    data_set='V1e-4'
+    data_set='V1e-3'
     msft = misfit(data_set=data_set)
     # define the prior
     pri = prior(sz_x=msft.sz_x,sz_t=msft.sz_t)
@@ -259,7 +269,7 @@ if __name__ == '__main__':
     # test
     # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
     v=pri.sample('fun').reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
-    h=1e-2
+    h=1e-3
     gradv_fd=(msft.cost(u+h*v).detach().cpu().numpy()-nll)/h
     gradv=np.sum(grad*v)
     rdiff_gradv=np.abs(gradv_fd-gradv)/np.linalg.norm(v)
@@ -271,7 +281,7 @@ if __name__ == '__main__':
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     
-    # plot data
+    # # plot data
     # msft.plot_data(dat_imgs=msft.truth.cpu().numpy(), save_imgs=True, save_path='./data/truth')
     # msft.plot_data(dat_imgs=msft.obs.cpu().numpy(), save_imgs=True, save_path='./data/obs')
     # msft.plot_data(dat_imgs=msft._fwd_map(msft.truth).detach().numpy(), save_imgs=True, save_path='./data/truth_fwd')

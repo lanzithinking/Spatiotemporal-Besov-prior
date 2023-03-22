@@ -15,6 +15,8 @@ from timeit import default_timer
 # import scipy.io
 import hdf5storage
 
+# set default floating point
+torch.set_default_tensor_type(torch.DoubleTensor)
 
 #w0: initial vorticity
 #f: forcing term
@@ -122,12 +124,12 @@ device = torch.device(dev)
 s = 64 # training 64 testing 256
 
 # viscosity
-V = 1e-4
+V = 1e-3
 # time span
 T = 30 # training 30 testing 50
 
 #Number of solutions to generate
-N = 10000 # training 10000 testing 20
+N = 5000 # training 5000 testing 20
 
 #Set up 2d polygon
 def rand_poly(n_samp=1, seed=2023):
@@ -151,7 +153,7 @@ X,Y = torch.meshgrid(t, t)#, indexing='ij')
 f = 0.1*(torch.sin(2*math.pi*(X + Y)) + torch.cos(2*math.pi*(X + Y)))
 
 #Number of snapshots from solution
-record_steps = T # training 30 testing 200
+record_steps = 30 # training 30 testing 200
 
 #Inputs
 a = torch.zeros(N, s, s)
@@ -180,5 +182,7 @@ for j in range(N//bsize):
     t1 = default_timer()
     print(j, c, t1-t0)
 
+import os
+os.makedirs('./data', exist_ok=True)
 # scipy.io.savemat('./data/ns_data_V'+format(V,'.0e').replace("e-0", "e-")+'_N'+str(N)+'_T'+str(T)+'.mat', mdict={'a': a.cpu().numpy(), 'u': u.cpu().numpy(), 't': sol_t.cpu().numpy()}, do_compression=True)
 hdf5storage.savemat('./data/ns_data_V'+format(V,'.0e').replace("e-0", "e-")+'_N'+str(N)+'_T'+str(T)+'.mat', mdict={'a': a.cpu().numpy(), 'u': u.cpu().numpy(), 't': sol_t.cpu().numpy()}, do_compression=True, format='7.3')

@@ -28,7 +28,7 @@ warnings.filterwarnings(action="once")
 def main(seed=2022):
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('alg_NO', nargs='?', type=int, default=0)
+    parser.add_argument('alg_NO', nargs='?', type=int, default=3)
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
@@ -42,8 +42,8 @@ def main(seed=2022):
     np.random.seed(args.seed_NO)
     
     # define NSE Bayesian inverse problem
-    data_args={'data_set':'V1e-4','data_thinning':4}
-    spat_args={'basis_opt':'Fourier','l':.1,'s':2,'q':args.q,'L':2000}
+    data_args={'data_set':'V1e-3','data_thinning':4}
+    spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':args.q,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':args.q,'L':2000}
     # temp_args={'ker_opt':'powexp','l':.5,'s':2,'q':1.0,'L':100}
     temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
@@ -57,7 +57,7 @@ def main(seed=2022):
         #     map=pickle.load(f)
         # f.close()
         # z_init=nse.whiten.stbp2wn(map).flatten(order='F')
-        u_init=nse.init_parameter if hasattr(nse,'init_parameter') else nse._init_param(init_opt='truth')
+        u_init=nse.init_parameter if hasattr(nse,'init_parameter') else nse._init_param(init_opt='prior_sample')
         z_init=nse.whiten.stbp2wn(u_init).flatten(order='F')
     except Exception as e:
         print(e)

@@ -35,12 +35,12 @@ def main(seed=2022):
     np.random.seed(args.seed_NO)
     
     # define NSE Bayesian inverse problem
-    data_args={'data_set':'V1e-4','data_thinning':4}
+    data_args={'data_set':'V1e-3','data_thinning':4}
     spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':args.q,'L':2000}
     # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':args.q,'L':2000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    nse = NSE(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed, init_param=True)
+    nse = NSE(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     logLik = lambda u: -nse._get_misfit(u, MF_only=True)
     rnd_pri = nse.prior.sample
     
@@ -51,7 +51,7 @@ def main(seed=2022):
         #     map=pickle.load(f)
         # f.close()
         # u=invT(map).flatten(order='F')
-        u=nse.init_parameter if hasattr(nse,'init_parameter') else nse._init_param()
+        u=nse.init_parameter if hasattr(nse,'init_parameter') else nse._init_param(init_opt='prior_sample')
     except Exception as e:
         print(e)
         u=rnd_pri()

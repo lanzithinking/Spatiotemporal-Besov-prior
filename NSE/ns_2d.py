@@ -16,7 +16,11 @@ from timeit import default_timer
 import hdf5storage
 
 # set default floating point
-torch.set_default_tensor_type(torch.DoubleTensor)
+prec = {0:'float',1:'double'}[0]
+torch.set_default_tensor_type({'float':torch.FloatTensor,'double':torch.DoubleTensor}[prec])
+
+# solve for training or testing
+sol4 = {0:'training',1:'testing'}[1]
 
 #w0: initial vorticity
 #f: forcing term
@@ -121,15 +125,15 @@ print('Solving NSE using '+dev +'...')
 device = torch.device(dev)
 
 #Resolution
-s = 64 # training 64 testing 256
+s = {'training':64,'testing':256}[sol4] # training 64 testing 256
 
 # viscosity
 V = 1e-3
 # time span
-T = 50 # training 50 testing 50
+T = {'training':50,'testing':50}[sol4] # training 50 testing 50
 
 #Number of solutions to generate
-N = 5000 # training 5000 testing 20
+N = {'training':5000,'testing':20}[sol4] # training 5000 testing 20
 
 #Set up 2d polygon
 def rand_poly(n_samp=1, seed=2023):
@@ -153,7 +157,7 @@ X,Y = torch.meshgrid(t, t)#, indexing='ij')
 f = 0.1*(torch.sin(2*math.pi*(X + Y)) + torch.cos(2*math.pi*(X + Y)))
 
 #Number of snapshots from solution
-record_steps = 50 # training 50 testing 200
+record_steps = {'training':50,'testing':200}[sol4] # training 50 testing 200
 
 #Inputs
 a = torch.zeros(N, s, s)

@@ -7,7 +7,7 @@ Created March 3, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -185,19 +185,29 @@ class misfit(object):
             u=u.reshape((np.prod(self.sz_x),-1),order='F') # (I,J)
         u_ = torch.tensor(u,dtype=torch.float,requires_grad=True,device=self.device)
         g = torch.autograd.grad(self.cost(u_), u_, create_graph=True)[0]
-        def hess(v):
+        def hess(v, batch_size=10):
             if v.shape[:2]!=(np.prod(self.sz_x),self.sz_t):
                 v=v.reshape((np.prod(self.sz_x),self.sz_t,-1),order='F') # (I,J,K)
             # if v.ndim==2: v=v[:,:,None]
-            v_ = torch.tensor(v,dtype=torch.float,requires_grad=False,device=self.device)
+            v_ = torch.tensor(v,dtype=torch.float,requires_grad=False)
             if v_.ndim==2:
+                v_ = v_.to(self.device)
                 # gv = torch.sum(g[:,:,None]*v_,dim=(0,1))
                 gv = torch.sum(g*v_)
                 gv.backward()
                 Hv = u_.grad
             elif v_.ndim==3:
+                v_ = v_.permute((2,0,1))
                 torch._C._debug_only_display_vmap_fallback_warnings(True)
-                Hv = torch.autograd.grad(g, u_,  v_.permute((2,0,1)), is_grads_batched=True)[0]
+                if self.device.type=='cuda' and v_.shape[0]>batch_size: # GPU card memory is limited
+                    v_ = torch.utils.data.DataLoader(v_, batch_size=batch_size, shuffle=False)
+                    Hv = []
+                    for v_i in v_:
+                        Hv.append(torch.autograd.grad(g, u_, v_i.to(self.device), retain_graph=True, is_grads_batched=True)[0])
+                    Hv = torch.cat(Hv)
+                else:
+                    v_ = v_.to(self.device)
+                    Hv = torch.autograd.grad(g, u_, v_, is_grads_batched=True)[0]
                 Hv = Hv.permute((1,2,0)).squeeze()
             else:
                 warnings.warn('Wrong dimension in Hessian-vector product!')
@@ -267,7 +277,8 @@ if __name__ == '__main__':
     print('The negative logarithm of likelihood at u is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
     hess=msft.Hess(u)
     # test
-    # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
+    # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t,11)
+    # hv=hess(v)
     v=pri.sample('fun').reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
     h=1e-3
     gradv_fd=(msft.cost(u+h*v).detach().cpu().numpy()-nll)/h
@@ -280,7 +291,7 @@ if __name__ == '__main__':
     print('Relative difference of Hessian-action in a direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
     t1=time.time()
     print('time: %.5f'% (t1-t0))
-    
+    # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
     # # plot data
     # msft.plot_data(dat_imgs=msft.truth.cpu().numpy(), save_imgs=True, save_path='./data/truth')
     # msft.plot_data(dat_imgs=msft.obs.cpu().numpy(), save_imgs=True, save_path='./data/obs')

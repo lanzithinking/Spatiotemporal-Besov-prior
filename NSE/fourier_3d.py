@@ -13,7 +13,8 @@ from timeit import default_timer
 # np.random.seed(0)
 
 # set default floating point
-torch.set_default_tensor_type(torch.DoubleTensor)
+prec = {0:'float',1:'double'}[0]
+torch.set_default_tensor_type({'float':torch.FloatTensor,'double':torch.DoubleTensor}[prec])
 
 ################################################################
 # 3d fourier layers
@@ -34,10 +35,10 @@ class SpectralConv3d(nn.Module):
         self.modes3 = modes3
 
         self.scale = (1 / (in_channels * out_channels))
-        self.weights1 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype=torch.cfloat))
-        self.weights2 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype=torch.cfloat))
-        self.weights3 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype=torch.cfloat))
-        self.weights4 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype=torch.cfloat))
+        self.weights1 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype={'float':torch.cfloat,'double':torch.cdouble}[prec]))
+        self.weights2 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype={'float':torch.cfloat,'double':torch.cdouble}[prec]))
+        self.weights3 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype={'float':torch.cfloat,'double':torch.cdouble}[prec]))
+        self.weights4 = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes1, self.modes2, self.modes3, dtype={'float':torch.cfloat,'double':torch.cdouble}[prec]))
 
     # Complex multiplication
     def compl_mul3d(self, input, weights):
@@ -50,7 +51,7 @@ class SpectralConv3d(nn.Module):
         x_ft = torch.fft.rfftn(x, dim=[-3,-2,-1])
 
         # Multiply relevant Fourier modes
-        out_ft = torch.zeros(batchsize, self.out_channels, x.size(-3), x.size(-2), x.size(-1)//2 + 1, dtype=torch.cfloat, device=x.device)
+        out_ft = torch.zeros(batchsize, self.out_channels, x.size(-3), x.size(-2), x.size(-1)//2 + 1, dtype={'float':torch.cfloat,'double':torch.cdouble}[prec], device=x.device)
         out_ft[:, :, :self.modes1, :self.modes2, :self.modes3] = \
             self.compl_mul3d(x_ft[:, :, :self.modes1, :self.modes2, :self.modes3], self.weights1)
         out_ft[:, :, -self.modes1:, :self.modes2, :self.modes3] = \
@@ -152,11 +153,11 @@ class FNO3d(nn.Module):
 
     def get_grid(self, shape, device):
         batchsize, size_x, size_y, size_z = shape[0], shape[1], shape[2], shape[3]
-        gridx = torch.tensor(np.linspace(0, 1, size_x), dtype=torch.float64)
+        gridx = torch.tensor(np.linspace(0, 1, size_x), dtype={'float':torch.float,'double':torch.float64}[prec])
         gridx = gridx.reshape(1, size_x, 1, 1, 1).repeat([batchsize, 1, size_y, size_z, 1])
-        gridy = torch.tensor(np.linspace(0, 1, size_y), dtype=torch.float64)
+        gridy = torch.tensor(np.linspace(0, 1, size_y), dtype={'float':torch.float,'double':torch.float64}[prec])
         gridy = gridy.reshape(1, 1, size_y, 1, 1).repeat([batchsize, size_x, 1, size_z, 1])
-        gridz = torch.tensor(np.linspace(0, 1, size_z), dtype=torch.float64)
+        gridz = torch.tensor(np.linspace(0, 1, size_z), dtype={'float':torch.float,'double':torch.float64}[prec])
         gridz = gridz.reshape(1, 1, 1, size_z, 1).repeat([batchsize, size_x, size_y, 1, 1])
         return torch.cat((gridx, gridy, gridz), dim=-1).to(device)
 
@@ -189,7 +190,7 @@ if __name__ == '__main__':
     sub = 1
     S = 64 // sub
     T_in = 10
-    T = 30 # T=40 for V1e-3; T=20 for V1e-4; T=10 for V1e-5;
+    T = {1e-3:40,1e-4:20,1e-5:10}[V] # T=40 for V1e-3; T=20 for V1e-4; T=10 for V1e-5;
     
     have_normalizer = False
     

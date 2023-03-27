@@ -8,7 +8,7 @@ Shiwei Lan @ ASU, 2022
 import os,argparse,pickle
 import numpy as np
 import timeit,time
-from scipy import stats
+from scipy import optimize
 
 # the inverse problem
 from NSE import *
@@ -28,13 +28,13 @@ warnings.filterwarnings(action="once")
 def main(seed=2022):
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('alg_NO', nargs='?', type=int, default=3)
+    parser.add_argument('alg_NO', nargs='?', type=int, default=0)
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=2000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-7,1e-5,1e-5,1e-3,1e-3))
-    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-5,5e-4,5e-4,1e-3,1e-3))
+    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,20,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
     
@@ -62,12 +62,37 @@ def main(seed=2022):
     except Exception as e:
         print(e)
         z_init=nse.whiten.sample()
-    # h=1e-7; v=np.random.randn(nse.prior.L*nse.prior.J)
-    # l,g=nse.get_geom(z_init,geom_ord=[0,1],whiten=True)[:2]; hess=nse.get_geom(z_init,geom_ord=[2],whiten=True)[2]
-    # Hv=hess(v)
-    # l1,g1=nse.get_geom(z_init+h*v,geom_ord=[0,1],whiten=True)[:2]
-    # print('error in gradient: %0.8f' %(abs((l1-l)/h-g.dot(v))/np.linalg.norm(v)))
-    # print('error in Hessian: %0.8f' %(np.linalg.norm(-(g1-g)/h-Hv)/np.linalg.norm(v)))
+    h=1e-5; v=np.random.randn(nse.prior.L*nse.prior.J)
+    l,g=nse.get_geom(z_init,geom_ord=[0,1],whiten=True)[:2]; hess=nse.get_geom(z_init,geom_ord=[2],whiten=True)[2]
+    Hv=hess(v)
+    l1,g1=nse.get_geom(z_init+h*v,geom_ord=[0,1],whiten=True)[:2]
+    print('error in gradient: %0.8f' %(abs((l1-l)/h-g.dot(v))/np.linalg.norm(v)))
+    print('error in Hessian: %0.8f' %(np.linalg.norm(-(g1-g)/h-Hv)/np.linalg.norm(v)))
+    
+    # pre-optimize to find a good start point
+    pre_optim_steps = 20
+    pre_optim = pre_optim_steps>0
+    NCG = True
+    options={'maxiter':pre_optim_steps,'disp':True}
+    if pre_optim:
+        print("Pre-optimizing to get a good initial point for MCMC...")
+        fun = lambda parameter: nse._get_misfit(nse.whiten.wn2stbp(parameter), MF_only=False)
+        def grad(parameter):
+            param = nse.whiten.wn2stbp(parameter)
+            g = nse._get_grad(param, MF_only=False)
+            g = nse.whiten.wn2stbp(parameter, 1)(g, adj=True)
+            return g.squeeze()
+        def hessp(parameter,v):
+            param = nse.whiten.wn2stbp(parameter)
+            Hv = nse._get_HessApply(param, MF_only=False)(nse.whiten.wn2stbp(parameter,1)(v) )
+            Hv = nse.whiten.wn2stbp(parameter, 1)(Hv, adj=True) 
+            Hv+= nse.whiten.wn2stbp(parameter, 2)(v, nse._get_grad(param, MF_only=False), adj=True)
+            return Hv.squeeze()
+        if NCG:
+            res = optimize.minimize(fun, z_init, method='trust-ncg', jac=grad, hessp=hessp, options=options)
+        else:
+            res = optimize.minimize(fun, z_init, method='L-BFGS-B', jac=grad, options=options)
+        z_init = res.x
     
     # # center priors
     # nse.prior.mean = u_init

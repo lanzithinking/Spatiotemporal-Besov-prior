@@ -28,13 +28,14 @@ warnings.filterwarnings(action="once")
 def main(seed=2022):
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('alg_NO', nargs='?', type=int, default=0)
+    parser.add_argument('alg_NO', nargs='?', type=int, default=2)
     parser.add_argument('seed_NO', nargs='?', type=int, default=2022)
     parser.add_argument('q', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=2000)
+    parser.add_argument('num_burnin', nargs='?', type=int, default=5000)
+    parser.add_argument('thinning', nargs='?', type=int, default=3)
     parser.add_argument('step_sizes', nargs='?', type=float, default=(1e-5,5e-4,5e-4,1e-3,1e-3))
-    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,20,1,5])
+    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,40,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC'))
     args = parser.parse_args()
     
@@ -108,54 +109,54 @@ def main(seed=2022):
           % (args.algs[args.alg_NO],args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.seed_NO))
     
     winfMC=wht_geoinfMC(z_init,nse,args.step_sizes[args.alg_NO],args.step_nums[args.alg_NO],args.algs[args.alg_NO],transformation=nse.whiten.wn2stbp, MF_only=True, whitened=True, k=100)
-    res=winfMC.sample(args.num_samp,args.num_burnin,return_result=True)#, save_result=False)
+    # res=winfMC.sample(args.num_samp,args.num_burnin,return_result=True)#, save_result=False)
     
-    # samp=[]; loglik=[]; times=[]
-    # accp=0; acpt=0
-    # sampler=getattr(winfMC,args.algs[args.alg_NO])
-    # prog=np.ceil((args.num_samp+args.num_burnin)*(.05+np.arange(0,1,.05)))
-    # beginning=timeit.default_timer()
-    # for i in range(args.num_samp+args.num_burnin):
-    #     if i==args.num_burnin:
-    #         # start the timer
-    #         tic=timeit.default_timer()
-    #         print('\nBurn-in completed; recording samples now...\n')
-    #     # generate MCMC sample with given sampler
-    #     acpt_ind,_=sampler()
-    #     u,l=winfMC.u,winfMC.ll
-    #     # display acceptance at intervals
-    #     if i+1 in prog:
-    #         print('{0:.0f}% has been completed.'.format(np.float(i+1)/(args.num_samp+args.num_burnin)*100))
-    #     # online acceptance rate
-    #     accp+=acpt_ind
-    #     if (i+1)%100==0:
-    #         print('Acceptance at %d iterations: %0.2f' % (i+1,accp/100))
-    #         accp=0.0
-    #     # save results
-    #     loglik.append(l)
-    #     if i>=args.num_burnin:
-    #         samp.append(T(u))
-    #         acpt+=acpt_ind
-    #     times.append(timeit.default_timer()-beginning)
-    # # stop timer
-    # toc=timeit.default_timer()
-    # time_=toc-tic
-    # acpt/=args.num_samp
-    # print("\nAfter %g seconds, %d samples have been collected. \n" % (time_,args.num_samp))
-    #
-    # # store the results
-    # samp=np.stack(samp); loglik=np.stack(loglik);  times=np.stack(times)
-    # # name file
-    # ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-    # savepath=os.path.join(os.getcwd(),'result')
-    # if not os.path.exists(savepath): os.makedirs(savepath)
-    # filename='nse_'+args.algs[args.alg_NO]+'_dim'+str(len(u))+'_'+ctime
-    # np.savez_compressed(os.path.join(savepath,filename),spat_args=spat_args, temp_args=temp_args, args=args, samp=samp,loglik=loglik,time_=time_,times=times)
+    samp=[]; loglik=[]; times=[]
+    accp=0; acpt=0
+    sampler=getattr(winfMC,args.algs[args.alg_NO])
+    prog=np.ceil((args.num_samp*args.thinning+args.num_burnin)*(.05+np.arange(0,1,.05)))
+    beginning=timeit.default_timer()
+    for i in range(args.num_samp*args.thinning+args.num_burnin):
+        if i==args.num_burnin:
+            # start the timer
+            tic=timeit.default_timer()
+            print('\nBurn-in completed; recording samples now...\n')
+        # generate MCMC sample with given sampler
+        acpt_ind,_=sampler()
+        u,l=winfMC.u,winfMC.ll
+        # display acceptance at intervals
+        if i+1 in prog:
+            print('{0:.0f}% has been completed.'.format(float(i+1)/(args.num_samp*args.thinning+args.num_burnin)*100))
+        # online acceptance rate
+        accp+=acpt_ind
+        if (i+1)%100==0:
+            print('Acceptance at %d iterations: %0.2f' % (i+1,accp/100))
+            accp=0.0
+        # save results
+        loglik.append(l)
+        if i>=args.num_burnin:
+            if (i-args.num_burnin)%args.thinning==0: samp.append(nse.whiten.wn2stbp(u))
+            acpt+=acpt_ind
+        times.append(timeit.default_timer()-beginning)
+    # stop timer
+    toc=timeit.default_timer()
+    time_=toc-tic
+    acpt/=args.num_samp*args.thinning
+    print("\nAfter %g seconds, %d samples have been collected. \n" % (time_,args.num_samp))
+    
+    # store the results
+    samp=np.stack(samp); loglik=np.stack(loglik);  times=np.stack(times)
+    # name file
+    ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
+    savepath=os.path.join(os.getcwd(),'result')
+    if not os.path.exists(savepath): os.makedirs(savepath)
+    filename='nse_'+args.algs[args.alg_NO]+'_dim'+str(len(u))+'_'+ctime
+    np.savez_compressed(os.path.join(savepath,filename),spat_args=spat_args, temp_args=temp_args, args=args, samp=samp,loglik=loglik,acpt=acpt,time_=time_,times=times)
     
     # plot
     # loaded=np.load(os.path.join(savepath,filename+'.npz'))
     # samp=loaded['samp']
-    samp=res[3]
+    # samp=res[3]
     
     try:
         if nse.prior.space=='vec': samp=nse.prior.vec2fun(samp.T).T

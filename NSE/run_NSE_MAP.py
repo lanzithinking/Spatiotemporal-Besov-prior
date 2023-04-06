@@ -78,8 +78,8 @@ def main(seed=2022):
         print('{0:4d}   {1: 3.6f}   {2: 3.6f}   {3: 3.6f}   {4: 3.6f}'.format(Nfeval, Xi[0], Xi[1], Xi[2], fval))
         Nfeval += 1
         FUN.append(fval)
-        # Xi_=nse.whiten.wn2stbp(Xi) if args.whiten else Xi
-        # ERR.append(np.linalg.norm((nse.prior.vec2fun(Xi_) if nse.prior.space=='vec' else Xi_) -truth.flatten(order='F'))/np.linalg.norm(truth))
+        Xi_=nse.whiten.wn2stbp(Xi) if args.whiten else Xi
+        ERR.append(np.linalg.norm((nse.prior.vec2fun(Xi_) if nse.prior.space=='vec' else Xi_) -truth.flatten(order='F'))/np.linalg.norm(truth))
     print('{0:4s}   {1:9s}   {2:9s}   {3:9s}   {4:9s}'.format('Iter', ' X1', ' X2', ' X3', 'f(X)'))
     # solve for MAP
     start = time.time()

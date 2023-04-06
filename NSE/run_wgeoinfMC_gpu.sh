@@ -2,13 +2,13 @@
  
 #SBATCH -N 1                        # number of compute nodes
 #SBATCH -c 5                        # number of "tasks" (cores)
-#SBATCH --mem=128G                   # GigaBytes of memory required (per node)
+#SBATCH --mem=64G                   # GigaBytes of memory required (per node)
 
-#SBATCH -p gpu                # partition 
+#SBATCH -p publicgpu                # partition 
 #SBATCH -q wildfire                 # Run job under wildfire QOS queue
 #SBATCH --gres=gpu:2                # Request two GPUs
 
-#SBATCH -t 2-00:00                  # wall time (D-HH:MM)
+#SBATCH -t 4-00:00                  # wall time (D-HH:MM)
 ##SBATCH -A slan7                   # Account hours will be pulled from (commented out with double # in front)
 #SBATCH -o %x.log                   # STDOUT (%j = JobId)
 #SBATCH -e %x.err                   # STDERR (%j = JobId)

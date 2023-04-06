@@ -36,9 +36,9 @@ def main(seed=2022):
     
     # define STEMPO Bayesian inverse problem
     data_args={'data_set':'simulation'}
-    spat_args={'basis_opt':args.bass[args.bas_NO],'l':.1,'s':1.0,'q':args.q,'L':2000}
+    spat_args={'basis_opt':args.bass[args.bas_NO],'l':.1,'s':1,'q':args.q,'L':2000}
     if spat_args['basis_opt']=='wavelet': spat_args['wvlet_typ']=args.wavs[args.wav_NO]
-    temp_args={'ker_opt':args.kers[args.ker_NO],'l':.5,'q':1.0,'L':100}
+    temp_args={'ker_opt':args.kers[args.ker_NO],'l':.2,'q':1.0,'L':100}
     store_eig = True
     stpo = STEMPO(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     if stpo.misfit.data_set=='simulation':
@@ -50,6 +50,7 @@ def main(seed=2022):
     if not hasattr(stpo,'init_parameter'): stpo._init_param(init_opt='LSE',lmda=10)
     param0 = stpo.init_parameter
     if stpo.prior.space=='fun': param0=stpo.prior.vec2fun(param0)
+    # param0 = stpo.prior.sample()
     if args.whiten: param0 = stpo.whiten.stbp2wn(param0).flatten(order='F')
     fun = lambda parameter: stpo._get_misfit(stpo.whiten.wn2stbp(parameter) if args.whiten else parameter, MF_only=False)
     def grad(parameter):
@@ -99,10 +100,14 @@ def main(seed=2022):
         print('\nNot Converged.')
     print('Final function value: %.4f.\n' % res.fun)
     
-    
     # store the results
     map_v=stpo.whiten.wn2stbp(res.x) if args.whiten else res.x
     map_f=stpo.prior.vec2fun(map_v) if stpo.prior.space=='vec' else map_v; funs=np.stack(FUN); errs=[] if len(ERR)==0 else np.stack(ERR)
+    if stpo.misfit.data_set=='simulation':
+        #  compare it with the truth
+        true_param = truth.flatten(order='F')
+        relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
+        print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
     map_f=np.rot90(map_f.reshape(np.append(stpo.misfit.sz_x,stpo.misfit.sz_t),order='F'),k=3,axes=(0,1))
     # name file
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")

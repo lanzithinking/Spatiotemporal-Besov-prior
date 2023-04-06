@@ -118,7 +118,7 @@ class misfit(object):
             A = sps.block_diag((saveA))    
             b = saveb.flatten(order ='F') 
             # xf = savex_true.flatten(order = 'F')
-            truth = savex_true.reshape((nx, ny, nt), order='F').transpose((2,0,1))
+            truth = savex_true.reshape((nx, ny, nt), order='F')
         elif self.data_set=='real':
             import h5py
             N = int(2240/self.data_thinning) # 140
@@ -356,6 +356,9 @@ if __name__ == '__main__':
     print('Relative difference of Hessian-action in a direction between direct calculation and finite difference: %.10f' % rdiff_hessv)
     t1=time.time()
     print('time: %.5f'% (t1-t0))
+    
+    # plot the true images
+    msft.plot_reconstruction(msft.truth, save_imgs=True, save_path='./data/truth_'+msft.data_set)
     
     # reconstruct the images by anisoTV
     xx=msft.reconstruct_anisoTV()

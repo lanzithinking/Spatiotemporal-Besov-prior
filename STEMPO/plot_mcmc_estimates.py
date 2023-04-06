@@ -20,12 +20,12 @@ spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':1.0,'L':2000}
 # spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
 # temp_args={'ker_opt':'powexp','l':.5,'s':2,'q':1.0,'L':100}
 temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
-store_eig = True
+store_eig = False
 stpo = STEMPO(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
 
 # algorithms
-algs=('wpCN','winfMALA','winfHMC','winfmMALA','winfmHMC','ESS')
-alg_names=('wpCN','w$\infty$-MALA','w$\infty$-HMC','w$\infty$-mMALA','w$\infty$-mHMC','ESS')
+algs=('winfmMALA',)#'winfmHMC','ESS')
+alg_names=('w$\infty$-mMALA',)#'w$\infty$-mHMC','ESS')
 num_algs=len(algs)
 # obtain estimates
 folder = './analysis'

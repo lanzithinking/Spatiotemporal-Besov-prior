@@ -53,10 +53,11 @@ class misfit(object):
         nml_name=mdl_name+'_normalizer'
         if not os.path.exists('./model'): os.makedirs('./model')
         if not os.path.exists('./model/'+mdl_name):
-            url='https://drive.google.com/drive/folders/1swLA6yKR1f3PKdYSKhLqK4zfNjS9pt_U'
+            # url='https://drive.google.com/drive/folders/1swLA6yKR1f3PKdYSKhLqK4zfNjS9pt_U'
+            url='https://drive.google.com/file/d/1sqqhHX5V-NXDTo9aiBa7pFVz4ecgFJlC'
             # import requests
-            # r = requests.get(url+'/'+dat_name)
-            # with open('./model/'+mdl_name+'.mat', "wb") as file:
+            # r = requests.get(url+'/'+mdl_name)
+            # with open('./model/'+mdl_name, "wb") as file:
             #     file.write(r.content)
             import gdown
             gdown.download_folder(url, quiet=True, use_cookies=False)
@@ -80,7 +81,8 @@ class misfit(object):
         if not os.path.exists('./data/'+dat_name+'.mat'):
             dat_name='NavierStokes_'+self.data_set+{'V1e-3':'_N5000_T50','V1e-4':'_N20_T50_R256_test','V1e-5':'_N1200_T20'}[self.data_set]
             print("downloading...")
-            url='https://drive.google.com/drive/folders/1UnbQh2WWc6knEHbLn-ZaXrKUZhp7pjt-'
+            # url='https://drive.google.com/drive/folders/1UnbQh2WWc6knEHbLn-ZaXrKUZhp7pjt-'
+            url='https://drive.google.com/file/d/1OADui9YEDctsOFfAT6FR89dMoF1cpfO0'
             # import requests
             # r = requests.get(url+'/'+dat_name+'.zip')
             # with open('./data/'+dat_name+'.zip', "wb") as file:

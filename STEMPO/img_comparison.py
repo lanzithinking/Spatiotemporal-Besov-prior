@@ -81,7 +81,8 @@ else:
                 loglik.append(-msft.cost(map))
                 psnr.append(PSNR(map, truth))
                 ssim.append(SSIM(map, truth))
-                haarpsi_,_,_ = haar_psi_numpy(map,truth)
+                map_ = ((map - np.min(map)) * (1/(np.max(map) - np.min(map)) * 255)) #.astype('uint8')
+                haarpsi_,_,_ = haar_psi_numpy(map_,truth)
                 haarpsi.append(haarpsi_)
                 num_read+=1
                 f.close()

@@ -115,12 +115,11 @@ class prior(STBP):
         
         proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
         qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
-        
+        A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
+        B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
         def hess(v):
             if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
             v=v.reshape((self.L,self.J,-1),order='F').swapaxes(0,1) # (J,L,K)
-            A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
-            B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
             Hv=A*self.qep.solve(v/self.gamma[None,:,None])/self.gamma[None,:,None]
             Hv+=B*self.qep.solve(proj_u)[:,:,None]*np.sum(proj_u[:,:,None]*self.qep.solve(v/self.gamma[None,:,None]),axis=0,keepdims=True)/self.gamma[None,:,None]
             Hv=Hv.swapaxes(0,1) # (L,J,K)
@@ -139,13 +138,12 @@ class prior(STBP):
         
         proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
         qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
-        
+        A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
+        B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
+        C=0.5*(self.N*(self.bsv.q-2)*logr + self.bsv.q*(self.bsv.q-1)*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
         def ihess(v): # does not exist if q=1 (taking (q/2|xi|**(q-2))**(-1)C^(-1) )
             if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
             v=v.reshape((self.L,self.J,-1),order='F').swapaxes(0,1) # (J,L,K)
-            A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
-            B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
-            C=0.5*(self.N*(self.bsv.q-2)*logr + self.bsv.q*(self.bsv.q-1)*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
             iHv=self.qep.mult(v*self.gamma[None,:,None])*self.gamma[None,:,None]
             if np.any(C): iHv+=-B/C*proj_u[:,:,None]*np.sum(proj_u[:,:,None]*(v*self.gamma[None,:,None]),axis=0,keepdims=True)*self.gamma[None,:,None]
             iHv/=A

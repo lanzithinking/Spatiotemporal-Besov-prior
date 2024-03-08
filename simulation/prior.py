@@ -11,12 +11,13 @@ __version__ = "1.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
-import os,sys
+import os
 import numpy as np
 import scipy as sp
 import scipy.sparse as sps
 
 # self defined modules
+import os,sys
 sys.path.append( "../" )
 from util.stbp.BSV import BSV
 from util.stbp.qEP import qEP
@@ -31,37 +32,21 @@ class prior(STBP):
     Spatiotemporal Besov prior measure STBP(mu,C,q).
     """
     def __init__(self,sz_x,sz_t,mean=None,store_eig=False,**kwargs):
-        '''
         if not hasattr(sz_x, "__len__"):
-            self.sz_x=(sz_x,)
+            self.sz_x=(sz_x,)*2
         else:
             self.sz_x=sz_x # I = np.prod(sz_x)
         xx,yy=np.meshgrid(np.linspace(0,1,self.sz_x[0]),np.linspace(0,1,self.sz_x[1]))
         bsv=BSV(x=np.stack([xx.flatten(),yy.flatten()]).T,store_eig=store_eig,**kwargs.pop('spat_args',{}))
-        '''
-        self.sz_x, self.sz_t=sz_x, sz_t # J = sz_t
-        x=self._grid(gdsz=self.sz_x)
-        bsv=BSV(x=x,store_eig=store_eig,**kwargs.pop('spat_args',{}))
-        
-        ##!!!!!!!!!!!!!!!!!!!!!!?? does this need to be consistent with defination in misfit????????????????
-        t=np.linspace(0,2,self.sz_t) 
+        self.sz_t=sz_t # J = sz_t
+        t=np.linspace(0,1,self.sz_t)
         qep=qEP(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{}))
-        self.space=kwargs.pop('space','fun') # alternative 'fun'
+        self.space=kwargs.pop('space','vec') # alternative 'fun'
         super().__init__(spat=bsv, temp=qep, store_eig=store_eig, **kwargs) # N = I*J
         self.dim={'vec':self.L*self.J,'fun':self.N}[self.space]
         self.mean=mean
         if self.mean is not None:
             assert self.mean.size==self.dim, "Non-conforming size of mean!"
-    
-    def _grid(self,gdsz=None):
-        """
-        Build the time grid
-        """
-        self.gdsz=gdsz
-        # set the grid
-        grid=np.linspace(0,1,self.gdsz)
-        # print('\nThe grid is defined.')
-        return grid
     
     def cost(self,u,logr=False):
         """
@@ -130,12 +115,11 @@ class prior(STBP):
         
         proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
         qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
-        
+        A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
+        B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
         def hess(v):
             if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
             v=v.reshape((self.L,self.J,-1),order='F').swapaxes(0,1) # (J,L,K)
-            A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
-            B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
             Hv=A*self.qep.solve(v/self.gamma[None,:,None])/self.gamma[None,:,None]
             Hv+=B*self.qep.solve(proj_u)[:,:,None]*np.sum(proj_u[:,:,None]*self.qep.solve(v/self.gamma[None,:,None]),axis=0,keepdims=True)/self.gamma[None,:,None]
             Hv=Hv.swapaxes(0,1) # (L,J,K)
@@ -154,13 +138,12 @@ class prior(STBP):
         
         proj_u=self.C_act(u, -1.0/self.bsv.q).reshape((self.J,-1)) # (J,L_)
         qep_norm=self.qep.logpdf(proj_u,out='norms')**(1/self.qep.q) # (L,)
-        
+        A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
+        B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
+        C=0.5*(self.N*(self.bsv.q-2)*logr + self.bsv.q*(self.bsv.q-1)*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
         def ihess(v): # does not exist if q=1 (taking (q/2|xi|**(q-2))**(-1)C^(-1) )
             if v.shape[0]!=self.L*self.J: v=self.fun2vec(v)
             v=v.reshape((self.L,self.J,-1),order='F').swapaxes(0,1) # (J,L,K)
-            A=.5*(-self.N*(self.bsv.q-2)*logr + self.bsv.q*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
-            B=(self.bsv.q-2)*(self.N*logr + self.bsv.q/2*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**4
-            C=0.5*(self.N*(self.bsv.q-2)*logr + self.bsv.q*(self.bsv.q-1)*qep_norm[None,:,None]**self.bsv.q)/qep_norm[None,:,None]**2
             iHv=self.qep.mult(v*self.gamma[None,:,None])*self.gamma[None,:,None]
             if np.any(C): iHv+=-B/C*proj_u[:,:,None]*np.sum(proj_u[:,:,None]*(v*self.gamma[None,:,None]),axis=0,keepdims=True)*self.gamma[None,:,None]
             iHv/=A
@@ -265,10 +248,10 @@ class prior(STBP):
 if __name__ == '__main__':
     np.random.seed(2022)
     # define the prior
-    sz_x=2**4; sz_t=20
+    sz_x=128; sz_t=20
     spat_args={'basis_opt':'Fourier','sigma2':1,'l':1,'s':1.5,'q':1.01,'L':1000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
-    prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='fun')
+    prior = prior(sz_x=sz_x, sz_t=sz_t, spat_args=spat_args, temp_args=temp_args, space='vec')
     # prior.mean = prior.sample()
     # generate sample
     u=prior.sample()

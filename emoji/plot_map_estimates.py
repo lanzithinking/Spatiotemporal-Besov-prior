@@ -18,7 +18,7 @@ seed=2022
 data_args={'data_set':'30proj','data_thinning':3}
 spat_args={'basis_opt':'Fourier','l':.1,'s':1.0,'q':1.0,'L':2000}
 temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
-store_eig = True
+store_eig = False
 emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
 whiten = True
 
@@ -38,20 +38,22 @@ else:
     maps=[]; funs=[]; errs=[]
     for m in range(num_mdls):
         print('Processing '+pri_mdls[m]+' prior model...\n')
-        map_flds = [f.path for f in os.scandir(folder) if 'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m] in f.name]
-        for fld in map_flds:
-            pckl_files=[f for f in os.listdir(fld) if f.endswith('.pckl')]
-            for k in pckl_files:
-                f=open(os.path.join(fld,k),'rb')
+        fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m])
+        pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
+        for f_i in pckl_files:
+            try:
+                f=open(os.path.join(fld_m,f_i),'rb')
                 f_read=pickle.load(f)
-                # map_f=f_read[2]
-                map_f=f_read[2].swapaxes(0,1)
-                map_f=np.rot90(map_f,k=3,axes=(0,1))
+                map_f=f_read[2]
+                # map_f=f_read[2].swapaxes(0,1)
+                # map_f=np.rot90(map_f,k=3,axes=(0,1))
                 maps.append(map_f)
                 funs.append(np.pad(f_read[3],(0,1000-len(f_read[3])),mode='constant',constant_values=np.nan))
                 errs.append(np.pad(f_read[4],(0,1000-len(f_read[4])),mode='constant',constant_values=np.nan))
                 f.close()
-                print(k+' has been read!')
+                print(k+' has been read!'); break
+            except:
+                pass
     maps=np.stack(maps)
     funs=np.stack(funs)
     errs=np.stack(errs)
@@ -60,13 +62,12 @@ else:
     pickle.dump([maps,funs,errs],f)
     f.close()
 
-# # replot
-# plt.rcParams['image.cmap'] = 'binary'
-# for m in range(num_mdls):
-#     map_flds = [f.path for f in os.scandir(folder) if 'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m] in f.name]
-#     for fld in map_flds:
-#         map_f = maps[m]
-#         emj.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path=fld)
+# replot
+plt.rcParams['image.cmap'] = 'gray'
+for m in range(num_mdls):
+    fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m])
+    map_f = maps[m]
+    emj.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path=fld_m, time_label=False)
 
 # errors
 N=500

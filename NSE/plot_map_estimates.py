@@ -26,7 +26,7 @@ whiten = True
 
 # models
 pri_mdls=('q1p1','q2p2','iidT')
-mdl_names=['STBP','STGP','time-independent']
+mdl_names=['STBP','STGP','time-uncorrelated']
 num_mdls=len(pri_mdls)
 
 # obtain estimates
@@ -62,13 +62,33 @@ else:
     pickle.dump([truth,maps,funs,errs],f)
     f.close()
 
-# # replot
+# replot
 # plt.rcParams['image.cmap'] = 'binary'
 # for m in range(num_mdls):
-#     map_flds = [f.path for f in os.scandir(folder) if 'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m] in f.name]
-#     for fld in map_flds:
-#         map_f = maps[m]
-#         nse.misfit.plot_data(dat_imgs=map_f, save_imgs=True, save_path=fld)
+#     fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m])
+#     map_f = maps[m]
+#     nse.misfit.plot_data(dat_imgs=map_f, save_imgs=True, save_path=fld_m, time_label=False)
+
+# selective plot
+# import sys
+# sys.path.append( "../" )
+# from util.common_colorbar import common_colorbar
+# times = [0,3,6,9]
+# plt.rcParams['image.cmap'] = 'jet'
+# for m in range(num_mdls):
+#     fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m])
+#     map_f = maps[m]
+#     fig,axes = plt.subplots(nrows=1,ncols=len(times),sharex=True,sharey=True,figsize=(18,4))
+#     sub_figs = [None]*len(axes.flat)
+#     for i,ax in enumerate(axes.flat):
+#         plt.axes(ax)
+#         sub_figs[i]=ax.imshow(map_f[:,:,times[i]], origin='lower', extent=[0,1,0,1])
+#         ax.tick_params(axis='x', labelsize=16)
+#         ax.tick_params(axis='y', labelsize=16)
+#         ax.set_title('t = '+str(times[i]),fontsize=18)
+#     plt.subplots_adjust(wspace=0.1, hspace=0.2)
+#     fig=common_colorbar(fig,axes,sub_figs)
+#     plt.savefig(fld_m+'/NSE_map'+('_whiten' if whiten else '')+'.png',bbox_inches='tight')
 
 # errors
 N=1000

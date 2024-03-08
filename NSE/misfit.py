@@ -7,7 +7,7 @@ Created March 3, 2023 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.7"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -43,6 +43,7 @@ class misfit(object):
         self.nzlvl = kwargs.pop('nzlvl',1.) # noise level
         # self.nzcov = self.nzlvl * max(torch.diag(nzcov)) * (nzcov + self.jit * torch.eye(nzcov.shape[0]))
         self.nzcov = self.nzlvl * max(torch.diag(nzcov)) * torch.eye(nzcov.shape[0],device=self.device, dtype=torch.float)#.to_sparse_csr()
+        # self.nzcov = self.nzlvl * torch.diag(torch.diag(nzcov)).to(self.device)
     
     def _load_model(self):
         """
@@ -242,18 +243,22 @@ class misfit(object):
     #         return Hv.squeeze()
     #     return hess
     
-    def plot_data(self, dat_imgs, save_imgs=False, save_path='./data'):
+    def plot_data(self, dat_imgs, save_imgs=False, save_path='./data', **kwargs):
         """
         Plot the data.
         """
         if np.ndim(dat_imgs)!=3: dat_imgs=dat_imgs.reshape(np.append(self.sz_x,-1),order='F')
         # plot
         import matplotlib.pyplot as plt
-        plt.set_cmap('Greys')
+        plt.clf()
+        plt.set_cmap(kwargs.pop('cmap','Greys'))
         if save_imgs and not os.path.exists(save_path): os.makedirs(save_path)
         for i in range(dat_imgs.shape[2]):
-            plt.imshow(dat_imgs[:,:,i], origin='lower')
-            plt.title('t = '+str(i),fontsize=16)
+            plt.imshow(dat_imgs[:,:,i], origin='lower')#, extent=[0,1,0,1])
+            # plt.xticks(fontsize=16)
+            # plt.yticks(fontsize=16)
+            plt.xticks([]),plt.yticks([])
+            if kwargs.get('time_label',True): plt.title('t = '+str(i),fontsize=20)
             if save_imgs: plt.savefig(save_path+'/NSE_'+str(i).zfill(len(str(dat_imgs.shape[2])))+'.png',bbox_inches='tight')
             plt.pause(.1)
             plt.draw()
@@ -294,7 +299,7 @@ if __name__ == '__main__':
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     # v=np.random.rand(np.prod(msft.sz_x),msft.sz_t)
-    # # plot data
-    # msft.plot_data(dat_imgs=msft.truth.cpu().numpy(), save_imgs=True, save_path='./data/truth')
-    # msft.plot_data(dat_imgs=msft.obs.cpu().numpy(), save_imgs=True, save_path='./data/obs')
-    # msft.plot_data(dat_imgs=msft._fwd_map(msft.truth).detach().numpy(), save_imgs=True, save_path='./data/truth_fwd')
+    # plot data
+    msft.plot_data(dat_imgs=msft.truth.cpu().numpy(), save_imgs=True, save_path='./data/truth')
+    msft.plot_data(dat_imgs=msft.obs.cpu().numpy(), save_imgs=True, save_path='./data/obs')
+    msft.plot_data(dat_imgs=msft._fwd_map(msft.truth).detach().numpy(), save_imgs=True, save_path='./data/truth_fwd', time_label=False)

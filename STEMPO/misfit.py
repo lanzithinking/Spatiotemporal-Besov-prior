@@ -7,7 +7,7 @@ Created October 10, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -307,19 +307,40 @@ class misfit(object):
             x_hat.append(spsla.lsqr(ops_proj[i],obs_proj[i],damp=lmda)[0])
         return np.stack(x_hat).T
     
-    def plot_reconstruction(self, rcstr_imgs, save_imgs=False, save_path='./reconstruction'):
+    def plot_reconstruction(self, rcstr_imgs, save_imgs=False, save_path='./reconstruction', **kwargs):
         """
         Plot the reconstruction.
         """
         if np.ndim(rcstr_imgs)!=3: rcstr_imgs=rcstr_imgs.reshape(np.append(self.sz_x,self.sz_t),order='F')
         # plot
         import matplotlib.pyplot as plt
-        plt.set_cmap('Greys')
+        plt.set_cmap(kwargs.pop('cmap','gray'))
         if save_imgs and not os.path.exists(save_path): os.makedirs(save_path)
         for i in range(rcstr_imgs.shape[2]):
             plt.imshow(rcstr_imgs[:,:,i])
-            plt.title('t = '+str(i),fontsize=16)
+            # plt.axis('off')
+            plt.xticks([]),plt.yticks([])
+            if kwargs.get('time_label',True): plt.title('t = '+str(i),fontsize=20)
             if save_imgs:  plt.savefig(save_path+'/stempo_'+str(i).zfill(len(str(rcstr_imgs.shape[2])))+'.png',bbox_inches='tight')
+            plt.pause(.1)
+            plt.draw()
+    
+    def plot_data(self, save_imgs=False, save_path='./data', **kwargs):
+        """
+        Plot the sinogram.
+        """
+        ops_proj, obs_proj = self.obs
+        n_theta = {'simulation':11,'real':45}[self.data_set]
+        import matplotlib.pyplot as plt
+        plt.set_cmap(kwargs.pop('cmap','Greys'))
+        if save_imgs and not os.path.exists(save_path): os.makedirs(save_path)
+        for i,s in enumerate(obs_proj):
+            plt.imshow(s.reshape((-1,n_theta),order='F'), aspect='auto')
+            plt.ylim(150,650)
+            # plt.axis('off')
+            plt.xticks([]),plt.yticks([])
+            if kwargs.get('time_label',True): plt.title('t = '+str(i),fontsize=20)
+            if save_imgs:  plt.savefig(save_path+'/stempo_'+str(i).zfill(len(str(len(obs_proj))))+'.png',bbox_inches='tight')
             plt.pause(.1)
             plt.draw()
 
@@ -358,7 +379,10 @@ if __name__ == '__main__':
     print('time: %.5f'% (t1-t0))
     
     # plot the true images
-    msft.plot_reconstruction(msft.truth, save_imgs=True, save_path='./data/truth_'+msft.data_set)
+    msft.plot_reconstruction(np.rot90(msft.truth,k=3,axes=(0,1)), save_imgs=True, save_path='./data/truth_'+msft.data_set)
+    
+    # plot the sinograms
+    msft.plot_data(save_imgs=True, save_path='./data/sinogram_'+msft.data_set, time_label=False)
     
     # reconstruct the images by anisoTV
     xx=msft.reconstruct_anisoTV()

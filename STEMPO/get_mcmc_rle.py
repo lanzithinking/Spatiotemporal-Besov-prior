@@ -18,7 +18,7 @@ seed=2022
 data_args={'data_set':'simulation'}
 spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
 temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
-store_eig = False
+store_eig = True
 # stpo = STEMPO(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
 
 # models
@@ -28,7 +28,8 @@ num_mdls=len(pri_mdls)
 # obtain estimates
 folder = './analysis'
 if os.path.exists(os.path.join(folder,'rle_summary.npz')):
-    rle_m,rle_s,rmse_m,rmse_s=load(os.path.join(folder,'rle_summary.npz'))
+    f_read=load(os.path.join(folder,'rle_summary.npz'))
+    rle_m,rle_s,rmse_m,rmse_s=f_read['rle_m'],f_read['rle_s'],f_read['rmse_m'],f_read['rmse_s']
     print('rle_summary.npz has been read!')
 else:
     # store results
@@ -56,11 +57,12 @@ else:
                     samp=f_read['samp_u' if '_hp_' in f_i else 'samp']
                     n_samp=samp.shape[0]
                     for s in range(n_samp):
+                        samp_s=stpo.prior.vec2fun(samp[s]) if stpo.prior.space=='vec' else samp[s]
                         if stpo.misfit.data_set=='simulation':
-                            rle_s=np.linalg.norm(samp[s]-truth.flatten(order='F'))/np.linalg.norm(truth)
+                            rle_s=np.linalg.norm(samp_s-truth.flatten(order='F'))/np.linalg.norm(truth)
                             rle_m[m]+=rle_s/n_samp
                             rle_s[m]+=rle_s**2/n_samp
-                        mse_s=stpo._get_misfit(samp[s])*2
+                        mse_s=stpo.misfit.cost(samp_s)*2
                         rmse_m[m]+=np.sqrt(mse_s)/n_samp
                         rmse_s[m]+=mse_s/n_samp
                     rle_s[m]=np.sqrt(rle_s[m]-rle_m[m]**2)

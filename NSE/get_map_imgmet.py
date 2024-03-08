@@ -1,19 +1,18 @@
 """
-Get root mean squared error (RMSE) of MAP for the process u in the time series problem.
+Get image metrics of MAP for the process u in the NSE inverse problem.
 ----------------------
 Shiwei Lan @ ASU, 2022
 """
-#pip3 install scikit-image
+
 import os,pickle,sys
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib as mp
+from skimage.metrics import structural_similarity as ssim_f
 
 # the inverse problem
 # from NSE import *
-from misfit import misfit
+from misfit import *
 sys.path.append( "../" )
-from NSE.haar_psi import haar_psi_numpy
+from util.haar_psi import haar_psi_numpy
 
 def PSNR(reco, gt):
     mse = np.mean((np.asarray(reco) - gt)**2)
@@ -23,40 +22,35 @@ def PSNR(reco, gt):
     return 20*np.log10(data_range) - 10*np.log10(mse)
 
 def SSIM(reco, gt):
-    from skimage.metrics import structural_similarity as ssim
     data_range = (np.max(gt) - np.min(gt))
-    return ssim(reco, gt, data_range=data_range)
+    return ssim_f(reco, gt, data_range=data_range)
     
 seed=2022
-whiten = 1
 # define the inverse problem
-data_args={'data_set':'simulation'}
-# spat_args={'basis_opt':'Fourier','l':.1,'s':1.0,'q':1.0,'L':2000}
-# temp_args={'ker_opt':'matern','l':.2,'q':1.0,'L':100}
-# store_eig = True
-# stpo = STEMPO(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
+data_args={'data_set':'V1e-3','data_thinning':4}
+# spat_args={'basis_opt':'Fourier','l':.1,'s':1,'q':1.0,'L':2000}
+# temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
+# store_eig = False
+# nse = NSE(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)
 msft = misfit(**data_args)
-if msft.data_set=='simulation':
-    truth = np.rot90(msft.truth,k=3,axes=(0,1))
-else:
-    truth = None
-
+truth = msft.truth.cpu().numpy()
+whiten = True
 
 # models
 pri_mdls=('q1p1','q2p2','iidT')
 mdl_names=['STBP','STGP','time-independent']
 num_mdls=len(pri_mdls)
 # obtain estimates
-folder = './reconstruction'
+folder = './invsol'
 if not os.path.exists(os.path.join(folder,'map_summary'+('_whiten' if whiten else '')+'.pckl')):
     maps=[[]]*num_mdls
     funs=[[]]*num_mdls
     errs=[[]]*num_mdls
-if os.path.exists(os.path.join(folder,'map_rle'+('_whiten' if whiten else '')+'.pckl')):
-    f=open(os.path.join(folder,'map_rle'+('_whiten' if whiten else '')+'.pckl'),'rb')
+if os.path.exists(os.path.join(folder,'map_imgmet'+('_whiten' if whiten else '')+'.pckl')):
+    f=open(os.path.join(folder,'map_imgmet'+('_whiten' if whiten else '')+'.pckl'),'rb')
     truth,rle_m,rle_s,loglik_m,loglik_s,psnr_m,psnr_s,ssim_m,ssim_s,haarpsi_m,haarpsi_s=pickle.load(f)
     f.close()
-    print('map_rle'+('_whiten' if whiten else '')+'.pckl has been read!')
+    print('map_imgmet'+('_whiten' if whiten else '')+'.pckl has been read!')
 else:
     # store results
     rle_m=np.zeros(num_mdls)
@@ -70,7 +64,7 @@ else:
         print('Processing '+pri_mdls[m]+' prior model...\n')
         rle=[]; loglik=[]; psnr=[]; ssim=[]; haarpsi=[]
         num_read=0
-        fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m])
+        fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m]+'_repeat')
         pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
         for f_i in pckl_files:
             try:
@@ -78,7 +72,7 @@ else:
                 f_read=pickle.load(f)
                 map=f_read[-3]
                 rle.append(np.linalg.norm(map-truth)/np.linalg.norm(truth))
-                loglik.append(-msft.cost(map))
+                loglik.append(-msft.cost(map).detach().cpu().numpy())
                 psnr.append(PSNR(map, truth))
                 ssim.append(SSIM(map, truth))
                 map_ = ((map - np.min(map)) * (1/(np.max(map) - np.min(map)) * 255)) #.astype('uint8')
@@ -106,14 +100,14 @@ else:
                 f_i=pckl_files[np.argmin(rle)]
                 f=open(os.path.join(fld_m,f_i),'rb')
                 f_read=pickle.load(f)
-                map_f=f_read[-3] #(560, 560, 20), truth (560, 20, 560) plot_map_estimate!!!!!!!!!!!!!!!!!!!!!!!!!!!???????
+                map_f=f_read[-3]
                 maps[m]=map_f
                 funs[m]=np.pad(f_read[-2],(0,1000-len(f_read[-2])),mode='constant',constant_values=np.nan)
                 errs[m]=np.pad(f_read[-1],(0,1000-len(f_read[-1])),mode='constant',constant_values=np.nan)
                 f.close()
                 print(f_i+' has been selected to print!')
     # save
-    f=open(os.path.join(folder,'map_rle'+('_whiten' if whiten else '')+'.pckl'),'wb')
+    f=open(os.path.join(folder,'map_imgmet'+('_whiten' if whiten else '')+'.pckl'),'wb')
     pickle.dump([truth,rle_m,rle_s,loglik_m,loglik_s,psnr_m,psnr_s,ssim_m,ssim_s,haarpsi_m,haarpsi_s],f)
     f.close()
 if not os.path.exists(os.path.join(folder,'map_summary'+('_whiten' if whiten else '')+'.pckl')):
@@ -129,5 +123,5 @@ if not os.path.exists(os.path.join(folder,'map_summary'+('_whiten' if whiten els
 import pandas as pd
 means = pd.DataFrame(data=np.vstack((rle_m,loglik_m,psnr_m,ssim_m,haarpsi_m)),columns=mdl_names[:num_mdls],index=['rle','log-lik','psnr','ssim','haarpsi'])
 stds = pd.DataFrame(data=np.vstack((rle_s,loglik_s,psnr_s,ssim_s,haarpsi_s)),columns=mdl_names[:num_mdls],index=['rle','log-lik','psnr','ssim','haarpsi'])
-means.to_csv(os.path.join(folder,'map_rle_means'+('_whiten' if whiten else '')+'.csv'),columns=mdl_names[:num_mdls])
-stds.to_csv(os.path.join(folder,'map_rle_stds'+('_whiten' if whiten else '')+'.csv'),columns=mdl_names[:num_mdls])
+means.to_csv(os.path.join(folder,'map_imgmet_means'+('_whiten' if whiten else '')+'.csv'),columns=mdl_names[:num_mdls])
+stds.to_csv(os.path.join(folder,'map_imgmet_stds'+('_whiten' if whiten else '')+'.csv'),columns=mdl_names[:num_mdls])

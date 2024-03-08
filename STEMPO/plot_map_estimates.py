@@ -25,11 +25,11 @@ if stpo.misfit.data_set=='simulation':
     truth = np.rot90(stpo.misfit.truth,k=3,axes=(0,1))
 else:
     truth = None
-whiten = False
+whiten = True
 
 # models
 pri_mdls=('q1p1','q2p2','iidT')
-mdl_names=['STBP','STGP','time-independent']
+mdl_names=['STBP','STGP','time-uncorrelated']
 num_mdls=len(pri_mdls)
 
 # obtain estimates
@@ -67,13 +67,12 @@ else:
     pickle.dump([truth,maps,funs,errs],f)
     f.close()
 
-# # replot
-# plt.rcParams['image.cmap'] = 'binary'
-# for m in range(num_mdls):
-#     map_flds = [f.path for f in os.scandir(folder) if 'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m] in f.name]
-#     for fld in map_flds:
-#         map_f = maps[m]
-#         stpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path=fld)
+# replot
+plt.rcParams['image.cmap'] = 'gray'
+for m in range(num_mdls):
+    fld_m = os.path.join(folder,'MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m])
+    map_f = maps[m]
+    stpo.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path=fld_m, time_label=False)
 
 # errors
 N=1000

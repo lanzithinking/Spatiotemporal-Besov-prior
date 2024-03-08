@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
-Class definition of the dynamic linear inverse problem of emoji.
+Class definition of the dynamic linear inverse problem of annulus.
 Shiwei Lan @ ASU 2022
 --------------------------------------------------------------------------
-Created July 5, 2022 for project of Spatiotemporal Besov prior (STBP)
+Created March 5, 2024 for project of Spatiotemporal Besov prior (STBP)
 """
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.1"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -48,7 +48,7 @@ class simulation:
         self.misfit = misfit(**kwargs)
         print('\nLikelihood model is obtained.')
         # set prior
-        self.prior = prior(sz_x=self.misfit.n_x,sz_t=self.misfit.n_t,**kwargs)
+        self.prior = prior(sz_x=self.misfit.sz_x,sz_t=self.misfit.sz_t,**kwargs)
         self.whiten = whiten(self.prior)
         print('\nPrior model is specified.')
         # set low-rank approximate Gaussian posterior
@@ -66,10 +66,9 @@ class simulation:
         if init_opt=='prior_sample':
             self.init_parameter = self.prior.sample()
         else:
-            self.init_parameter = self.misfit.obs.flatten()
+            self.init_parameter = self.misfit.obs.flatten(order='F')
             if self.prior.space=='vec': self.init_parameter = self.prior.fun2vec(self.init_parameter)
         return self.init_parameter
-    
     
     def _get_misfit(self, parameter, MF_only=True):
         """
@@ -85,7 +84,7 @@ class simulation:
         Compute the gradient of misfit (default), or the gradient of negative log-posterior for given parameter.
         """
         # obtain the gradient
-        grad = self.misfit.grad(self.prior.vec2fun(parameter) if self.prior.space=='vec' else parameter)
+        grad = self.misfit.grad(self.prior.vec2fun(parameter) if self.prior.space=='vec' else parameter).flatten(order='F')
         if self.prior.space=='vec': grad = self.prior.fun2vec(grad)
         if not MF_only: grad += self.prior.grad(parameter)
         
@@ -98,7 +97,7 @@ class simulation:
         """
         # obtain the Hessian
         # hess_ = lambda v: self.prior.fun2vec(self.misfit.Hess(self.prior.vec2fun(parameter))(self.prior.vec2fun(v)))
-        hess_ = lambda v: self.prior.fun2vec(self.misfit.Hess()(self.prior.vec2fun(v))) if self.prior.space=='vec' else self.misfit.Hess()(v)
+        hess_ = lambda v: self.prior.fun2vec(self.misfit.Hess()(self.prior.vec2fun(v))) if self.prior.space=='vec' else self.misfit.Hess()(v).reshape((self.prior.N,-1),order='F').squeeze()
         hess = hess_ if MF_only else lambda v: hess_(v) + self.prior.Hess(parameter)(v)
         return hess
     
@@ -289,23 +288,25 @@ if __name__ == '__main__':
     seed=2022
     np.random.seed(seed)
     # define Bayesian inverse problem
-    spat_args={'basis_opt':'Fourier','l':1,'s':2,'q':1.0,'L':2000}
+    n_x=2**4; n_t=10
+    nzvar=0.1**2
+    spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':1000}
     temp_args={'ker_opt':'matern','l':.5,'q':1.0,'L':100}
     store_eig = True
-    emj = simulation(spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, space='fun', seed=seed)
+    sim = simulation(n_x=n_x, n_t=n_t, nzvar=nzvar, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, space='vec', seed=seed)
     # test
-    emj.test(1e-6, MF_only=False)
+    sim.test(1e-6, MF_only=False)
     # obtain MAP
-    map_v = emj.get_MAP(SAVE=True, NCG=True)#,init_opt='LSE',lmda=10)
+    map_v = sim.get_MAP(SAVE=True, NCG=False)#,init_opt='LSE',lmda=10)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
-    # #  compare it with the truth
-    # true_param = emj.misfit.truth # no truth
-    # map_f = emj.prior.vec2fun(map_v).reshape(true_param.shape)
-    # relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
-    # print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
-    # # report the minimum cost
-    # # min_cost = emj._get_misfit(map_v)
-    # # print('Minimum cost: %.4f' % min_cost)
+    #  compare it with the truth
+    true_param = sim.misfit.truth # no truth
+    map_f = sim.prior.vec2fun(map_v).reshape(true_param.shape)
+    relerr = np.linalg.norm(map_f-true_param)/np.linalg.norm(true_param)
+    print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
+    # report the minimum cost
+    # min_cost = sim._get_misfit(map_v)
+    # print('Minimum cost: %.4f' % min_cost)
     # plot MAP
-    map_f = np.rot90(emj.prior.vec2fun(map_v).reshape(np.append(emj.misfit.sz_x,emj.misfit.sz_t),order='F'),k=3,axes=(0,1))
-    emj.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')
+    map_f = sim.prior.vec2fun(map_v).reshape(np.append(sim.misfit.sz_x,sim.misfit.sz_t),order='F')
+    sim.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path='./reconstruction/MAP')

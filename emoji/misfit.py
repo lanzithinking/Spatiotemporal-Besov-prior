@@ -8,7 +8,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __credits__ = "Mirjeta Pasha"
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "1.0"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -218,19 +218,40 @@ class misfit(object):
             x_hat.append(spsla.lsqr(ops_proj[i],obs_proj[i],damp=lmda)[0])
         return np.stack(x_hat).T
     
-    def plot_reconstruction(self, rcstr_imgs, save_imgs=False, save_path='./reconstruction'):
+    def plot_reconstruction(self, rcstr_imgs, save_imgs=False, save_path='./reconstruction', **kwargs):
         """
         Plot the reconstruction.
         """
         if np.ndim(rcstr_imgs)!=3: rcstr_imgs=rcstr_imgs.reshape(np.append(self.sz_x,self.sz_t),order='F')
         # plot
         import matplotlib.pyplot as plt
-        plt.set_cmap('Greys')
+        plt.set_cmap(kwargs.pop('cmap','gray'))
         if save_imgs and not os.path.exists(save_path): os.makedirs(save_path)
         for i in range(rcstr_imgs.shape[2]):
             plt.imshow(rcstr_imgs[:,:,i])
-            plt.title('t = '+str(i),fontsize=16)
+            # plt.axis('off')
+            plt.xticks([]),plt.yticks([])
+            if kwargs.get('time_label',True): plt.title('t = '+str(i),fontsize=20)
             if save_imgs: plt.savefig(save_path+'/emoji_'+str(i).zfill(len(str(rcstr_imgs.shape[2])))+'.png',bbox_inches='tight')
+            plt.pause(.1)
+            plt.draw()
+    
+    def plot_data(self, save_imgs=False, save_path='./data', **kwargs):
+        """
+        Plot the sinogram.
+        """
+        ops_proj, obs_proj = self.obs
+        n_theta = int(int(self.data_set[:2])/self.data_thinning)
+        import matplotlib.pyplot as plt
+        plt.set_cmap(kwargs.pop('cmap','Greys'))
+        if save_imgs and not os.path.exists(save_path): os.makedirs(save_path)
+        for i,s in enumerate(obs_proj):
+            plt.imshow(s.reshape((-1,n_theta),order='F'), aspect='auto')
+            plt.ylim(45,170)
+            # plt.axis('off')
+            plt.xticks([]),plt.yticks([])
+            if kwargs.get('time_label',True): plt.title('t = '+str(i),fontsize=20)
+            if save_imgs:  plt.savefig(save_path+'/emoji_'+str(i).zfill(len(str(len(obs_proj))))+'.png',bbox_inches='tight')
             plt.pause(.1)
             plt.draw()
     
@@ -268,26 +289,29 @@ if __name__ == '__main__':
     t1=time.time()
     print('time: %.5f'% (t1-t0))
     
-    # # reconstruct the images by anisoTV
-    # xx=msft.reconstruct_anisoTV()
-    # # plot
-    # # import matplotlib.pyplot as plt
-    # msft.plot_reconstruction(xx, save_imgs=True, save_path='./reconstruction/anisoTV')
-    #
-    # # evaluate the likelihood at anisoTV reconstruction
-    # u=xx.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
-    # nll=msft.cost(u)
-    # grad=msft.grad(u)
-    # print('The negative logarithm of likelihood at anisoTV reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    # plot the sinograms
+    msft.plot_data(save_imgs=True, save_path='./data/sinogram_'+msft.data_set, time_label=False)
     
-    # # reconstruct the images by LSE
-    # x_hat=msft.reconstruct_LSE(lmda=10)
-    # # plot
-    # # import matplotlib.pyplot as plt
-    # msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE')
-    #
-    # # evaluate the likelihood at anisoTV reconstruction
-    # u=x_hat.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
-    # nll=msft.cost(u)
-    # grad=msft.grad(u)
-    # print('The negative logarithm of likelihood at LSE reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    # reconstruct the images by anisoTV
+    xx=msft.reconstruct_anisoTV()
+    # plot
+    # import matplotlib.pyplot as plt
+    msft.plot_reconstruction(xx, save_imgs=True, save_path='./reconstruction/anisoTV')
+    
+    # evaluate the likelihood at anisoTV reconstruction
+    u=xx.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
+    nll=msft.cost(u)
+    grad=msft.grad(u)
+    print('The negative logarithm of likelihood at anisoTV reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))
+    
+    # reconstruct the images by LSE
+    x_hat=msft.reconstruct_LSE(lmda=10)
+    # plot
+    # import matplotlib.pyplot as plt
+    msft.plot_reconstruction(x_hat, save_imgs=True, save_path='./reconstruction/LSE')
+    
+    # evaluate the likelihood at anisoTV reconstruction
+    u=x_hat.reshape((np.prod(msft.sz_x),msft.sz_t),order='F')
+    nll=msft.cost(u)
+    grad=msft.grad(u)
+    print('The negative logarithm of likelihood at LSE reconstruction is %0.4f, and the L2 norm of its gradient is %0.4f' %(nll,np.linalg.norm(grad)))

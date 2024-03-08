@@ -17,10 +17,8 @@ seed=2022
 # define the inverse problem
 data_args={'data_set':'60proj','data_thinning':2}
 spat_args={'basis_opt':'Fourier','l':1,'s':1,'q':1.0,'L':2000}
-# spat_args={'basis_opt':'wavelet','wvlet_typ':'Meyer','l':1,'s':2,'q':1.0,'L':2000}
-# temp_args={'ker_opt':'powexp','l':.5,'s':2,'q':1.0,'L':100}
 temp_args={'ker_opt':'matern','l':.5,'s':2,'q':1.0,'L':100}
-store_eig = False
+store_eig = True
 # emj = emoji(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
 
 # models

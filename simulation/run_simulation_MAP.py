@@ -20,12 +20,12 @@ warnings.filterwarnings(action="once")
 
 def main(seed=2022):
     parser = argparse.ArgumentParser()
-    parser.add_argument('n_x', nargs='?', type=int, default=16)
-    parser.add_argument('n_t', nargs='?', type=int, default=10)
+    parser.add_argument('n_x', nargs='?', type=int, default=2**8)
+    parser.add_argument('n_t', nargs='?', type=int, default=100)
     parser.add_argument('bas_NO', nargs='?', type=int, default=0)
     parser.add_argument('wav_NO', nargs='?', type=int, default=0)
     parser.add_argument('ker_NO', nargs='?', type=int, default=1)
-    parser.add_argument('q', nargs='?', type=int, default=1)
+    parser.add_argument('q', nargs='?', type=float, default=-1)
     parser.add_argument('whiten', nargs='?', type=int, default=1) # choose to optimize in white noise representation space
     parser.add_argument('NCG', nargs='?', type=int, default=0) # choose to optimize with Newton conjugate gradient method
     parser.add_argument('bass', nargs='?', type=str, default=('Fourier','wavelet'))
@@ -37,12 +37,22 @@ def main(seed=2022):
     np.random.seed(seed)
     
     # define simulation Bayesian inverse problem
-    temp_corl={0:1e-10,1:0.1,2:0.1}[args.q]
-    if args.q==0: args.q=1
+    # if args.q==0:
+    #     temp_corl=1e-10
+    #     args.q=1
+    # else:
+    #     temp_corl=0.1
     data_args={'n_x':args.n_x,'n_t':args.n_t,'nzvar':1e-2}
     spat_args={'basis_opt':args.bass[args.bas_NO],'l':.1,'s':1,'q':args.q,'L':2000}
     if spat_args['basis_opt']=='wavelet': spat_args['wvlet_typ']=args.wavs[args.wav_NO]
-    temp_args={'ker_opt':args.kers[args.ker_NO],'l':temp_corl,'q':args.q,'L':100}
+    temp_args={'ker_opt':args.kers[args.ker_NO],'l':0.1,'q':args.q,'L':100}
+    if args.q==0:
+        spat_args['q']=1
+        temp_args['q']=1
+        temp_args['l']=1e-10
+    elif args.q==-1:
+        spat_args['q']=abs(args.q)
+        temp_args={'basis_opt':args.bass[args.bas_NO],'l':.1,'s':1,'q':abs(args.q),'L':100,'pure_Besov':True}
     store_eig = True
     sim = simulation(**data_args, spat_args=spat_args, temp_args=temp_args, store_eig=store_eig, seed=seed)#, init_param=True)
     if hasattr(sim.misfit, 'truth'):
@@ -115,7 +125,7 @@ def main(seed=2022):
     map_f=np.rot90(map_f.reshape(np.append(sim.misfit.sz_x,sim.misfit.sz_t),order='F'),k=3,axes=(0,1))
     # name file
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-    f_name=spat_args['basis_opt']+('_'+spat_args['wvlet_typ'] if spat_args['basis_opt']=='wavelet' else '')+'_'+temp_args['ker_opt']+('_whiten' if args.whiten else '')+('_NCG' if args.NCG else '')+('_iidT' if temp_args['l']<data_args['nzvar'] else '_q'+str(args.q))
+    f_name=spat_args['basis_opt']+('_'+spat_args['wvlet_typ'] if spat_args['basis_opt']=='wavelet' else '')+'_'+(temp_args['ker_opt'] if 'ker_opt' in temp_args else '')+('_whiten' if args.whiten else '')+('_NCG' if args.NCG else '')+('_iidT' if args.q==0 else '_pureBSV' if args.q<0 else '_q'+str(args.q))
     savepath=os.path.join(os.getcwd(),'./reconstruction/simulation_I{}_J{}_'.format(sim.prior.I, sim.prior.J)+'/MAP_'+f_name)
     if not os.path.exists(savepath): os.makedirs(savepath)
     # save
@@ -125,18 +135,19 @@ def main(seed=2022):
     pickle.dump([spat_args, temp_args, map_f, funs, errs],f)
     f.close()
     # plot
-    # sim.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path=savepath)
+    sim.misfit.plot_reconstruction(rcstr_imgs=map_f, save_imgs=True, save_path=savepath)
 
 if __name__ == '__main__':
-    # main()
-    n_seed = 10; i=0; n_success=0
-    while n_success < n_seed:
-        seed_i=2022+i*10
-        try:
-            print("Running for seed %d ...\n"% (seed_i))
-            main(seed=seed_i)
-            n_success+=1
-        except Exception as e:
-            print(e)
-            pass
-        i+=1
+    main()
+    # n_seed = 10; i=0; n_success=0; n_failure=0
+    # while n_success < n_seed and n_failure < 10* n_seed:
+    #     seed_i=2022+i*10
+    #     try:
+    #         print("Running for seed %d ...\n"% (seed_i))
+    #         main(seed=seed_i)
+    #         n_success+=1
+    #     except Exception as e:
+    #         print(e)
+    #         n_failure+=1
+    #         pass
+    #     i+=1

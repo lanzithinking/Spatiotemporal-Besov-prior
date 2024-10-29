@@ -31,8 +31,8 @@ nxs=(2**4,2**5,2**7,2**8)
 nts=(10,20,50,100)
 num_nxs=len(nxs)
 num_nts=len(nts)
-pri_mdls=('q1','q2','iidT')
-mdl_names=['STBP','STGP','time-independent']
+pri_mdls=('q1','q2','iidT','pureBSV')
+mdl_names=['STBP','STGP','time-independent','pure-Besov']
 num_mdls=len(pri_mdls)
 row_idx=[]
 # obtain estimates
@@ -44,7 +44,7 @@ if not os.path.exists(os.path.join(folder,'map_summary'+('_whiten' if whiten els
     truth=[[]]*(num_nxs*num_nts)
 if os.path.exists(os.path.join(folder,'map_rle'+('_whiten' if whiten else '')+'.pckl')):
     f=open(os.path.join(folder,'map_rle'+('_whiten' if whiten else '')+'.pckl'),'rb')
-    truth,rle_m,rle_s,loglik_m,loglik_s=pickle.load(f)
+    truth,rle_m,rle_s,loglik_m,loglik_s,row_idx=pickle.load(f)
     f.close()
     print('map_rle'+('_whiten' if whiten else '')+'.pckl has been read!')
 else:
@@ -62,7 +62,7 @@ else:
                 print('Processing simulation I{}_J{}_'.format(nxs[i]**2, nts[j])+' for '+ pri_mdls[m]+' prior model...\n')
                 rle=[]; loglik=[]
                 num_read=0
-                fld_m = os.path.join(folder,'simulation_I{}_J{}_'.format(nxs[i]**2, nts[j]))+'/MAP_Fourier_matern_'+('whiten_' if whiten else '')+pri_mdls[m]#+'_repeat')
+                fld_m = os.path.join(folder,'simulation_I{}_J{}_'.format(nxs[i]**2, nts[j]))+'/MAP_Fourier_'+('_' if pri_mdls[m]=='pureBSV' else 'matern_')+('whiten_' if whiten else '')+pri_mdls[m]#+'_repeat')
                 pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
                 for f_i in pckl_files:
                     try:

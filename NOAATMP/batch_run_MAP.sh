@@ -85,11 +85,9 @@ else
 	exit 0
 fi
 
-for q in {-1..2}
+for q in {0..2}
 do
-	if [ ${q} -eq -1 ]; then
-		mdl_name='pureBSV'
-	elif [ ${q} -eq 0 ]; then
+	if [ ${q} -eq 0 ]; then
 		mdl_name='iidT'
 	elif [ ${q} -eq 1 ]; then
 		mdl_name='STBP'
@@ -99,12 +97,6 @@ do
 		echo "Wrong args!"
 		exit 0
 	fi
-	for n_x in 16 32 128 256
-	do
-		for n_t in 10 20 50 100
-		do
-			sbatch --job-name=${mdl_name}-I${n_x}-J${n_t} --output=MAP-${mdl_name}-I${n_x}-J${n_t}.log run_MAP.sh ${n_x} ${n_t} ${bas_NO} ${wav_NO} ${ker_NO} ${q} ${whiten} ${NCG}
-			echo "Job MAP-${mdl_name}-I${n_x}-J${n_t} submitted."
-		done
-	done
+	sbatch --job-name=${mdl_name} --output=MAP-${mdl_name}.log run_MAP.sh ${bas_NO} ${wav_NO} ${ker_NO} ${q} ${whiten} ${NCG}
+	echo "Job MAP-${mdl_name} submitted."
 done

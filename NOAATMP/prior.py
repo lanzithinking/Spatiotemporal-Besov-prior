@@ -7,7 +7,7 @@ Created June 30, 2022 for project of Spatiotemporal Besov prior (STBP)
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022, The STBP project"
 __license__ = "GPL"
-__version__ = "1.4"
+__version__ = "1.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu lanzithinking@outlook.com"
 
@@ -40,10 +40,7 @@ class prior(STBP):
         bsv=BSV(x=np.stack([xx.flatten(),yy.flatten()]).T,store_eig=store_eig,**kwargs.pop('spat_args',{}))
         self.sz_t=sz_t # J = sz_t
         t=np.linspace(0,1,self.sz_t)
-        if kwargs.pop('pure_Besov', False):
-            qep=BSV(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{})) # a hack for pure Besov approach
-        else:
-            qep=qEP(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{}))
+        qep=qEP(x=t,store_eig=store_eig,**kwargs.pop('temp_args',{}))
         self.space=kwargs.pop('space','vec') # alternative 'fun'
         super().__init__(spat=bsv, temp=qep, store_eig=store_eig, **kwargs) # N = I*J
         self.dim={'vec':self.L*self.J,'fun':self.N}[self.space]

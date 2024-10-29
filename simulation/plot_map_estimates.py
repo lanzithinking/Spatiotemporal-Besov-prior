@@ -32,8 +32,8 @@ nxs=(2**4,2**5,2**7,2**8)
 nts=(10,20,50,100)
 num_nxs=len(nxs)
 num_nts=len(nts)
-pri_mdls=('q1','q2','iidT')
-mdl_names=['STBP','STGP','time-uncorrelated']
+pri_mdls=('q1','q2','iidT','pureBSV')
+mdl_names=['STBP','STGP','time-uncorrelated','pure-Besov']
 num_mdls=len(pri_mdls)
 
 # obtain estimates
